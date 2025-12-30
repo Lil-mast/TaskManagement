@@ -1,6 +1,8 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Flame, Clock, Target, Ban } from 'lucide-react';
 import { MatrixQuadrant } from './components/MatrixQuadrant';
+import { useAuth } from '../lib/auth';
+import { getTasks, addTask, deleteTask as deleteTaskFromDB } from '../lib/supabase';
 import type { Task } from './components/TaskCard';
 
 interface TasksByQuadrant {
@@ -11,40 +13,175 @@ interface TasksByQuadrant {
 }
 
 export default function App() {
+  const { user, loading, signIn, signOutUser, isSupabaseMode } = useAuth();
   const [tasks, setTasks] = useState<TasksByQuadrant>({
     urgent_important: [],
     urgent_not_important: [],
     not_urgent_important: [],
     not_urgent_not_important: [],
   });
+  const [loadingTasks, setLoadingTasks] = useState(false);
 
-  const addTask = (quadrant: keyof TasksByQuadrant, text: string) => {
-    const newTask: Task = {
-      id: Date.now().toString() + Math.random(),
-      text,
-    };
-    setTasks((prev) => ({
-      ...prev,
-      [quadrant]: [...prev[quadrant], newTask],
-    }));
+  useEffect(() => {
+    if (isSupabaseMode && user && user.id !== 'local-user') {
+      loadTasks();
+    } else if (!isSupabaseMode) {
+      // Load from localStorage in local mode
+      const savedTasks = localStorage.getItem('eisenhower-tasks');
+      if (savedTasks) {
+        try {
+          const parsedTasks = JSON.parse(savedTasks);
+          setTasks(parsedTasks);
+        } catch (error) {
+          console.error('Error loading tasks from localStorage:', error);
+        }
+      }
+    } else {
+      setTasks({
+        urgent_important: [],
+        urgent_not_important: [],
+        not_urgent_important: [],
+        not_urgent_not_important: [],
+      });
+    }
+  }, [user, isSupabaseMode]);
+
+  const loadTasks = async () => {
+    if (!user || !isSupabaseMode) return;
+    setLoadingTasks(true);
+    const { data, error } = await getTasks(user.id);
+    if (error) {
+      console.error('Error loading tasks:', error);
+    } else {
+      const tasksByQuadrant: TasksByQuadrant = {
+        urgent_important: [],
+        urgent_not_important: [],
+        not_urgent_important: [],
+        not_urgent_not_important: [],
+      };
+      data?.forEach((task: Task) => {
+        if (tasksByQuadrant[task.quadrant as keyof TasksByQuadrant]) {
+          tasksByQuadrant[task.quadrant as keyof TasksByQuadrant].push(task);
+        }
+      });
+      setTasks(tasksByQuadrant);
+    }
+    setLoadingTasks(false);
   };
 
-  const deleteTask = (quadrant: keyof TasksByQuadrant, taskId: string) => {
-    setTasks((prev) => ({
-      ...prev,
-      [quadrant]: prev[quadrant].filter((task) => task.id !== taskId),
-    }));
+  const saveTasksToLocalStorage = (newTasks: TasksByQuadrant) => {
+    if (!isSupabaseMode) {
+      localStorage.setItem('eisenhower-tasks', JSON.stringify(newTasks));
+    }
   };
+
+  const addTaskToDB = async (quadrant: keyof TasksByQuadrant, title: string) => {
+    if (isSupabaseMode && !user) return;
+
+    if (isSupabaseMode) {
+      const { data, error } = await addTask({
+        title,
+        quadrant,
+        user_id: user!.id,
+      });
+      if (error) {
+        console.error('Error adding task:', error);
+      } else if (data) {
+        setTasks((prev) => ({
+          ...prev,
+          [quadrant]: [...prev[quadrant], data[0]],
+        }));
+      }
+    } else {
+      // Local mode
+      const newTask: Task = {
+        id: Date.now().toString() + Math.random(),
+        title,
+        quadrant,
+        user_id: 'local-user',
+        created_at: new Date().toISOString(),
+      };
+      setTasks((prev) => {
+        const newTasks = {
+          ...prev,
+          [quadrant]: [...prev[quadrant], newTask],
+        };
+        saveTasksToLocalStorage(newTasks);
+        return newTasks;
+      });
+    }
+  };
+
+  const deleteTaskFromApp = async (quadrant: keyof TasksByQuadrant, taskId: string) => {
+    if (isSupabaseMode) {
+      const { error } = await deleteTaskFromDB(taskId);
+      if (error) {
+        console.error('Error deleting task:', error);
+      } else {
+        setTasks((prev) => ({
+          ...prev,
+          [quadrant]: prev[quadrant].filter((task) => task.id !== taskId),
+        }));
+      }
+    } else {
+      // Local mode
+      setTasks((prev) => {
+        const newTasks = {
+          ...prev,
+          [quadrant]: prev[quadrant].filter((task) => task.id !== taskId),
+        };
+        saveTasksToLocalStorage(newTasks);
+        return newTasks;
+      });
+    }
+  };
+
+  if (loading) {
+    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
+  }
+
+  if (isSupabaseMode && !user) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center">
+        <div className="bg-white rounded-xl p-8 shadow-sm text-center">
+          <h1 className="text-2xl font-bold text-gray-900 mb-4">Eisenhower Matrix</h1>
+          <p className="text-gray-600 mb-6">Sign in to manage your tasks</p>
+          <button
+            onClick={signIn}
+            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Sign in with Google
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
         {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-gray-900 mb-2">Eisenhower Matrix</h1>
-          <p className="text-gray-600">
-            Organize your tasks by urgency and importance
-          </p>
+        <div className="flex justify-between items-center mb-8">
+          <div>
+            <h1 className="text-gray-900 mb-2">Eisenhower Matrix</h1>
+            <p className="text-gray-600">
+              Organize your tasks by urgency and importance
+            </p>
+            {isSupabaseMode && (
+              <p className="text-sm text-gray-500 mt-1">Connected to Supabase</p>
+            )}
+            {!isSupabaseMode && (
+              <p className="text-sm text-gray-500 mt-1">Local mode - tasks saved in browser</p>
+            )}
+          </div>
+          {isSupabaseMode && user && (
+            <button
+              onClick={signOutUser}
+              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+            >
+              Sign Out
+            </button>
+          )}
         </div>
 
         {/* Matrix Grid */}
@@ -65,8 +202,8 @@ export default function App() {
                 color="#dc2626"
                 icon={<Flame size={24} />}
                 tasks={tasks.urgent_important}
-                onAddTask={(text) => addTask('urgent_important', text)}
-                onDeleteTask={(id) => deleteTask('urgent_important', id)}
+                onAddTask={(text) => addTaskToDB('urgent_important', text)}
+                onDeleteTask={(id) => deleteTaskFromApp('urgent_important', id)}
               />
 
               {/* Delegate - Urgent & Not Important */}
@@ -76,8 +213,8 @@ export default function App() {
                 color="#f97316"
                 icon={<Target size={24} />}
                 tasks={tasks.urgent_not_important}
-                onAddTask={(text) => addTask('urgent_not_important', text)}
-                onDeleteTask={(id) => deleteTask('urgent_not_important', id)}
+                onAddTask={(text) => addTaskToDB('urgent_not_important', text)}
+                onDeleteTask={(id) => deleteTaskFromApp('urgent_not_important', id)}
               />
             </div>
           </div>
@@ -98,8 +235,8 @@ export default function App() {
                 color="#3b82f6"
                 icon={<Clock size={24} />}
                 tasks={tasks.not_urgent_important}
-                onAddTask={(text) => addTask('not_urgent_important', text)}
-                onDeleteTask={(id) => deleteTask('not_urgent_important', id)}
+                onAddTask={(text) => addTaskToDB('not_urgent_important', text)}
+                onDeleteTask={(id) => deleteTaskFromApp('not_urgent_important', id)}
               />
 
               {/* Delete - Not Urgent & Not Important */}
@@ -109,8 +246,8 @@ export default function App() {
                 color="#6b7280"
                 icon={<Ban size={24} />}
                 tasks={tasks.not_urgent_not_important}
-                onAddTask={(text) => addTask('not_urgent_not_important', text)}
-                onDeleteTask={(id) => deleteTask('not_urgent_not_important', id)}
+                onAddTask={(text) => addTaskToDB('not_urgent_not_important', text)}
+                onDeleteTask={(id) => deleteTaskFromApp('not_urgent_not_important', id)}
               />
             </div>
           </div>
