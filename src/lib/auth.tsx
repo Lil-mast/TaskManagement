@@ -1,12 +1,14 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from './supabase';
+import { supabase, isSupabaseConfigured, signInWithGoogle } from './supabase';
 
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   loading: boolean;
-  signIn: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (email: string, password: string) => Promise<void>;
+  signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
   isSupabaseMode: boolean;
 }
@@ -53,19 +55,55 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, []);
 
-  const signIn = async () => {
+  const signIn = async (email: string, password: string) => {
     if (!isSupabaseConfigured) {
-      throw new Error('Authentication not available in local mode');
+      // In local mode, simulate successful sign in
+      const mockUser = {
+        id: 'local-user',
+        email,
+        user_metadata: {},
+        app_metadata: {},
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User;
+      setUser(mockUser);
+      setSession(null);
+      return;
     }
-    const { error } = await supabase!.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent',
-        },
-      },
+    const { error } = await supabase!.auth.signInWithPassword({
+      email,
+      password,
     });
+    if (error) throw error;
+  };
+
+  const signUp = async (email: string, password: string) => {
+    if (!isSupabaseConfigured) {
+      // In local mode, simulate successful sign up
+      const mockUser = {
+        id: 'local-user',
+        email,
+        user_metadata: {},
+        app_metadata: {},
+        aud: 'authenticated',
+        created_at: new Date().toISOString(),
+      } as User;
+      setUser(mockUser);
+      setSession(null);
+      return;
+    }
+    const { error } = await supabase!.auth.signUp({
+      email,
+      password,
+    });
+    if (error) throw error;
+  };
+
+  const signInWithGoogleAuth = async () => {
+    if (!isSupabaseConfigured) {
+      throw new Error('Google authentication not available in local mode');
+    }
+    const { error } = await signInWithGoogle();
     if (error) throw error;
   };
 
@@ -85,6 +123,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     session,
     loading,
     signIn,
+    signUp,
+    signInWithGoogle: signInWithGoogleAuth,
     signOutUser,
     isSupabaseMode: isSupabaseConfigured,
   };

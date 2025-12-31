@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Flame, Clock, Target, Ban } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import { MatrixQuadrant } from './components/MatrixQuadrant';
 import { useAuth } from '../lib/auth';
 import { getTasks, addTask, deleteTask as deleteTaskFromDB } from '../lib/supabase';
@@ -14,6 +14,32 @@ interface TasksByQuadrant {
 
 export default function App() {
   const { user, loading, signIn, signOutUser, isSupabaseMode } = useAuth();
+  const navigate = useNavigate();
+
+  // Redirect to signup if not authenticated
+  useEffect(() => {
+    if (!loading && !user) {
+      navigate('/signup');
+    }
+  }, [user, loading, navigate]);
+
+  // Show loading while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-vintage-cream">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-vintage-brown mx-auto mb-4"></div>
+          <p className="text-vintage-brown font-serif">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated (will redirect)
+  if (!user) {
+    return null;
+  }
+
   const [tasks, setTasks] = useState<TasksByQuadrant>({
     urgent_important: [],
     urgent_not_important: [],
@@ -136,166 +162,105 @@ export default function App() {
     }
   };
 
-  if (loading) {
-    return <div className="min-h-screen flex items-center justify-center">Loading...</div>;
-  }
-
-  if (isSupabaseMode && !user) {
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 flex items-center justify-center">
-        <div className="bg-white rounded-xl p-8 shadow-sm text-center">
-          <h1 className="text-2xl font-bold text-gray-900 mb-4">Eisenhower Matrix</h1>
-          <p className="text-gray-600 mb-6">Sign in to manage your tasks</p>
-          <button
-            onClick={signIn}
-            className="bg-blue-600 text-white px-6 py-2 rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            Sign in with Google
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 via-purple-50 to-pink-50 p-4 md:p-8">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-8">
-          <div>
-            <h1 className="text-gray-900 mb-2">Eisenhower Matrix</h1>
-            <p className="text-gray-600">
-              Organize your tasks by urgency and importance
-            </p>
-            {isSupabaseMode && (
-              <p className="text-sm text-gray-500 mt-1">Connected to Supabase</p>
-            )}
-            {!isSupabaseMode && (
-              <p className="text-sm text-gray-500 mt-1">Local mode - tasks saved in browser</p>
-            )}
+    <div className="relative font-serif">
+
+      {/* BEGIN: Navigation Header */}
+      <nav className="bg-vintage-red text-white py-3 shadow-md relative z-20">
+        <div className="container mx-auto px-4 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <Link to="/" className="text-xl font-bold tracking-wide hover:text-vintage-cream transition-colors">
+              Eisenhower Matrix
+            </Link>
           </div>
-          {isSupabaseMode && user && (
-            <button
-              onClick={signOutUser}
-              className="bg-gray-600 text-white px-4 py-2 rounded-lg hover:bg-gray-700 transition-colors"
+          <div className="flex items-center gap-6">
+            <Link
+              to="/"
+              className="text-white hover:text-vintage-cream transition-colors font-medium"
             >
-              Sign Out
-            </button>
-          )}
-        </div>
-
-        {/* Matrix Grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Urgent Section Header */}
-          <div className="lg:col-span-1">
-            <div className="bg-red-100 rounded-t-xl px-4 py-3 border-2 border-b-0 border-red-400">
-              <h2 className="text-red-800 text-center flex items-center justify-center gap-2">
-                <Flame size={24} />
-                Urgent
-              </h2>
-            </div>
-            <div className="grid gap-6">
-              {/* Do - Urgent & Important */}
-              <MatrixQuadrant
-                title="Do"
-                subtitle="Important & Urgent"
-                color="#dc2626"
-                icon={<Flame size={24} />}
-                tasks={tasks.urgent_important}
-                onAddTask={(text) => addTaskToDB('urgent_important', text)}
-                onDeleteTask={(id) => deleteTaskFromApp('urgent_important', id)}
-              />
-
-              {/* Delegate - Urgent & Not Important */}
-              <MatrixQuadrant
-                title="Delegate"
-                subtitle="Not Important & Urgent"
-                color="#f97316"
-                icon={<Target size={24} />}
-                tasks={tasks.urgent_not_important}
-                onAddTask={(text) => addTaskToDB('urgent_not_important', text)}
-                onDeleteTask={(id) => deleteTaskFromApp('urgent_not_important', id)}
-              />
-            </div>
-          </div>
-
-          {/* Not Urgent Section Header */}
-          <div className="lg:col-span-1">
-            <div className="bg-blue-100 rounded-t-xl px-4 py-3 border-2 border-b-0 border-blue-400">
-              <h2 className="text-blue-800 text-center flex items-center justify-center gap-2">
-                <Clock size={24} />
-                Not Urgent
-              </h2>
-            </div>
-            <div className="grid gap-6">
-              {/* Decide - Not Urgent & Important */}
-              <MatrixQuadrant
-                title="Decide"
-                subtitle="Important & Not Urgent"
-                color="#3b82f6"
-                icon={<Clock size={24} />}
-                tasks={tasks.not_urgent_important}
-                onAddTask={(text) => addTaskToDB('not_urgent_important', text)}
-                onDeleteTask={(id) => deleteTaskFromApp('not_urgent_important', id)}
-              />
-
-              {/* Delete - Not Urgent & Not Important */}
-              <MatrixQuadrant
-                title="Delete"
-                subtitle="Not Important & Not Urgent"
-                color="#6b7280"
-                icon={<Ban size={24} />}
-                tasks={tasks.not_urgent_not_important}
-                onAddTask={(text) => addTaskToDB('not_urgent_not_important', text)}
-                onDeleteTask={(id) => deleteTaskFromApp('not_urgent_not_important', id)}
-              />
-            </div>
+              Dashboard
+            </Link>
+            <Link
+              to="/profile"
+              className="text-white hover:text-vintage-cream transition-colors font-medium"
+            >
+              Profile
+            </Link>
+            {user && (
+              <button
+                onClick={signOutUser}
+                className="bg-vintage-brown hover:bg-vintage-brown/80 text-white px-4 py-2 rounded transition-colors text-sm font-medium"
+              >
+                Sign Out
+              </button>
+            )}
           </div>
         </div>
+      </nav>
+      {/* END: Navigation Header */}
 
-        {/* Legend */}
-        <div className="mt-8 bg-white rounded-xl p-6 shadow-sm">
-          <h3 className="text-gray-900 mb-4">How to use this matrix:</h3>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div className="flex gap-3">
-              <div className="text-red-600">
-                <Flame size={20} />
-              </div>
-              <div>
-                <p className="text-gray-900">Do First</p>
-                <p className="text-gray-600">Critical tasks requiring immediate attention</p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="text-blue-600">
-                <Clock size={20} />
-              </div>
-              <div>
-                <p className="text-gray-900">Schedule</p>
-                <p className="text-gray-600">Important tasks to plan and schedule</p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="text-orange-600">
-                <Target size={20} />
-              </div>
-              <div>
-                <p className="text-gray-900">Delegate</p>
-                <p className="text-gray-600">Tasks that others can handle</p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <div className="text-gray-600">
-                <Ban size={20} />
-              </div>
-              <div>
-                <p className="text-gray-900">Eliminate</p>
-                <p className="text-gray-600">Low-value tasks to minimize or remove</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* BEGIN: Main Content */}
+      <main className="relative z-10 container mx-auto px-4 py-8 md:py-12 min-h-screen flex flex-col items-center">
+        {/* BEGIN: Header Section */}
+        <header className="text-center mb-10 md:mb-14">
+          <h1 className="text-5xl md:text-6xl font-bold text-vintage-brown mb-2 tracking-wide drop-shadow-sm main-title-shadow">
+            Eisenhower Matrix Dashboard
+          </h1>
+          <p className="text-lg md:text-xl text-vintage-brown/80 font-hand font-bold tracking-wider">
+            Organize your tasks by urgency and importance
+          </p>
+        </header>
+        {/* END: Header Section */}
+
+        {/* BEGIN: Matrix Grid */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-6xl">
+          {/* QUADRANT 1: DO (Important & Urgent) */}
+          <MatrixQuadrant
+            title="Do"
+            subtitle="Important & Urgent"
+            headerColor="bg-do-header"
+            icon="fa-solid fa-fire"
+            tasks={tasks.urgent_important}
+            onAddTask={(text) => addTaskToDB('urgent_important', text)}
+            onDeleteTask={(id) => deleteTaskFromApp('urgent_important', id)}
+          />
+
+          {/* QUADRANT 2: DECIDE (Important & Not Urgent) */}
+          <MatrixQuadrant
+            title="Decide"
+            subtitle="Important & Not Urgent"
+            headerColor="bg-decide-header"
+            icon="fa-regular fa-clock"
+            tasks={tasks.not_urgent_important}
+            onAddTask={(text) => addTaskToDB('not_urgent_important', text)}
+            onDeleteTask={(id) => deleteTaskFromApp('not_urgent_important', id)}
+          />
+
+          {/* QUADRANT 3: DELEGATE (Not Important & Urgent) */}
+          <MatrixQuadrant
+            title="Delegate"
+            subtitle="Not Important & Urgent"
+            headerColor="bg-delegate-header"
+            icon="fa-solid fa-bullseye"
+            tasks={tasks.urgent_not_important}
+            onAddTask={(text) => addTaskToDB('urgent_not_important', text)}
+            onDeleteTask={(id) => deleteTaskFromApp('urgent_not_important', id)}
+          />
+
+          {/* QUADRANT 4: DELETE (Not Important & Not Urgent) */}
+          <MatrixQuadrant
+            title="Delete"
+            subtitle="Not Important & Not Urgent"
+            headerColor="bg-delete-header"
+            icon="fa-solid fa-ban"
+            tasks={tasks.not_urgent_not_important}
+            onAddTask={(text) => addTaskToDB('not_urgent_not_important', text)}
+            onDeleteTask={(id) => deleteTaskFromApp('not_urgent_not_important', id)}
+          />
+        </section>
+        {/* END: Matrix Grid */}
+      </main>
+      {/* END: Main Content */}
     </div>
   );
 }

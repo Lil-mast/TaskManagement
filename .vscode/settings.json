@@ -1,0 +1,17 @@
+{
+  "folders": [
+    {
+      "name": "TaskManagement",
+      "path": "."
+    },
+    {
+      "name": "Backend",
+      "path": "backend"
+    }
+  ],
+  "settings": {
+    "typescript.preferences.includePackageJsonAutoImports": "auto",
+    "typescript.suggest.autoImports": true,
+    "typescript.preferences.importModuleSpecifier": "relative"
+  }
+}

@@ -16,15 +16,18 @@ interface TaskCardProps {
 
 export function TaskCard({ task, onDelete }: TaskCardProps) {
   return (
-    <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-200 flex items-start justify-between gap-2 group hover:shadow-md transition-shadow">
-      <p className="flex-1 text-gray-800">{task.title}</p>
+    <li className="task-item flex items-center justify-between py-1 px-2 hover:bg-black/5 rounded transition-colors group">
+      <span className="task-text flex-grow">{task.title}</span>
       <button
-        onClick={() => onDelete(task.id)}
-        className="opacity-0 group-hover:opacity-100 transition-opacity text-gray-400 hover:text-red-500 p-1 rounded hover:bg-red-50"
+        onClick={(e) => {
+          e.stopPropagation();
+          onDelete(task.id);
+        }}
+        className="delete-btn opacity-0 group-hover:opacity-100 transition-opacity text-vintage-brown hover:text-red-600 p-1 ml-2"
         aria-label="Delete task"
       >
         <Trash2 size={16} />
       </button>
-    </div>
+    </li>
   );
 }

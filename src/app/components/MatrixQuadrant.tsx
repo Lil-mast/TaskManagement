@@ -1,12 +1,11 @@
-import { Plus } from 'lucide-react';
 import { useState } from 'react';
 import { TaskCard, type Task } from './TaskCard';
 
 interface MatrixQuadrantProps {
   title: string;
   subtitle: string;
-  color: string;
-  icon: React.ReactNode;
+  headerColor: string;
+  icon: string;
   tasks: Task[];
   onAddTask: (text: string) => void;
   onDeleteTask: (id: string) => void;
@@ -15,7 +14,7 @@ interface MatrixQuadrantProps {
 export function MatrixQuadrant({
   title,
   subtitle,
-  color,
+  headerColor,
   icon,
   tasks,
   onAddTask,
@@ -39,65 +38,62 @@ export function MatrixQuadrant({
   };
 
   return (
-    <div className="bg-gray-50 rounded-xl p-5 flex flex-col h-full border-2" style={{ borderColor: color }}>
-      {/* Header */}
-      <div className="mb-4">
-        <div className="flex items-center gap-2 mb-1">
-          <div style={{ color }}>{icon}</div>
-          <h3 className="text-gray-900">{title}</h3>
+    <article className="matrix-card h-80 relative">
+      <div className="matrix-card-border-effect"></div>
+      {/* Card Header */}
+      <div className={`card-header ${headerColor} p-4 flex items-center space-x-4`}>
+        <div className="icon-wrapper">
+          <i className={`${icon} icon-style`}></i>
         </div>
-        <p className="text-gray-600 text-sm">{subtitle}</p>
+        <div className="flex flex-col justify-center">
+          <h2 className="text-2xl font-bold text-vintage-brown leading-none">{title}</h2>
+          <span className="text-xs font-bold text-vintage-brown uppercase tracking-wider opacity-70">{subtitle}</span>
+        </div>
       </div>
-
-      {/* Task List */}
-      <div className="flex-1 space-y-2 mb-4 overflow-y-auto">
-        {tasks.map((task) => (
-          <TaskCard key={task.id} task={task} onDelete={onDeleteTask} />
-        ))}
-        {tasks.length === 0 && !isAdding && (
-          <p className="text-gray-400 text-sm text-center py-8">No tasks yet</p>
+      {/* Card Body */}
+      <div className="lined-paper flex-grow p-4 overflow-y-auto custom-scroll font-hand text-2xl text-vintage-brown">
+        <ul className="list-none space-y-0">
+          {tasks.map((task) => (
+            <TaskCard key={task.id} task={task} onDelete={onDeleteTask} />
+          ))}
+        </ul>
+      </div>
+      {/* Card Footer */}
+      <div className="p-3 bg-parchment/30">
+        {isAdding ? (
+          <form onSubmit={handleSubmit} className="space-y-2">
+            <input
+              value={newTaskText}
+              onChange={(e) => setNewTaskText(e.target.value)}
+              placeholder="Enter task description..."
+              className="w-full p-2 border border-card-border rounded bg-parchment text-vintage-brown font-hand text-xl"
+              autoFocus
+            />
+            <div className="flex gap-2">
+              <button
+                type="submit"
+                className="flex-1 px-4 py-2 bg-card-border text-parchment rounded hover:bg-vintage-brown transition-colors"
+              >
+                Add
+              </button>
+              <button
+                type="button"
+                onClick={handleCancel}
+                className="px-4 py-2 bg-gray-200 text-vintage-brown rounded hover:bg-gray-300 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        ) : (
+          <button
+            className="add-task-box w-full py-2 text-center text-vintage-brown font-hand text-xl hover:bg-black/5 transition-colors cursor-pointer"
+            onClick={() => setIsAdding(true)}
+          >
+            + Add Task
+          </button>
         )}
       </div>
-
-      {/* Add Task Form */}
-      {isAdding ? (
-        <form onSubmit={handleSubmit} className="space-y-2">
-          <textarea
-            value={newTaskText}
-            onChange={(e) => setNewTaskText(e.target.value)}
-            placeholder="Enter task description..."
-            className="w-full p-3 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 resize-none"
-            style={{ focusRingColor: color }}
-            rows={3}
-            autoFocus
-          />
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="flex-1 px-4 py-2 text-white rounded-lg hover:opacity-90 transition-opacity"
-              style={{ backgroundColor: color }}
-            >
-              Add
-            </button>
-            <button
-              type="button"
-              onClick={handleCancel}
-              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
-      ) : (
-        <button
-          onClick={() => setIsAdding(true)}
-          className="w-full py-3 border-2 border-dashed rounded-lg hover:bg-white transition-colors flex items-center justify-center gap-2 text-gray-600 hover:text-gray-900"
-          style={{ borderColor: color }}
-        >
-          <Plus size={20} />
-          Add Task
-        </button>
-      )}
-    </div>
+    </article>
   );
 }
