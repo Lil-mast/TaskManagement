@@ -18,6 +18,15 @@ export default function App() {
   const { user, loading, signIn, signOutUser, isFirebaseMode } = useAuth();
   const navigate = useNavigate();
 
+  // State declarations
+  const [tasks, setTasks] = useState<TasksByQuadrant>({
+    urgent_important: [],
+    urgent_not_important: [],
+    not_urgent_important: [],
+    not_urgent_not_important: [],
+  });
+  const [loadingTasks, setLoadingTasks] = useState(false);
+
   // Redirect authenticated users to dashboard, non-authenticated users to landing page
   useEffect(() => {
     if (!loading) {
@@ -45,14 +54,6 @@ export default function App() {
   if (!user && isFirebaseMode) {
     return null;
   }
-
-  const [tasks, setTasks] = useState<TasksByQuadrant>({
-    urgent_important: [],
-    urgent_not_important: [],
-    not_urgent_important: [],
-    not_urgent_not_important: [],
-  });
-  const [loadingTasks, setLoadingTasks] = useState(false);
 
   useEffect(() => {
     if (isFirebaseMode && user && user.id !== 'local-user') {
@@ -322,7 +323,7 @@ export default function App() {
 
         {/* BEGIN: Matrix Grid */}
         {!loadingTasks && (
-        <section className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-6xl">
+          <section className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-6xl">
           {/* QUADRANT 1: DO (Important & Urgent) */}
           <MatrixQuadrant
             title="Do"
@@ -379,8 +380,8 @@ export default function App() {
             quadrant="not_urgent_not_important"
           />
         </section>
-        {/* END: Matrix Grid */}
         )}
+        {/* END: Matrix Grid */}
       </main>
       {/* END: Main Content */}
     </div>

@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 
 export default function Login() {
-  const { signIn, signInWithGoogle, user } = useAuth();
+  const { signIn, signInWithGoogle, user, isFirebaseMode } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
@@ -50,8 +50,8 @@ export default function Login() {
     }
   };
 
-  // If user is already signed in, redirect to dashboard
-  if (user) {
+  // If user is already signed in (Firebase mode only), redirect to dashboard
+  if (user && isFirebaseMode) {
     navigate('/app');
     return null;
   }
