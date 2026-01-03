@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { MatrixQuadrant } from './components/MatrixQuadrant';
 import { DNDProviderWrapper } from './components/DNDProvider';
 import { useAuth } from '../lib/auth';
-import { getTasks, addTask, deleteTask as deleteTaskFromDB, updateTask } from '../lib/supabase';
+import { getTasks, addTask, deleteTask as deleteTaskFromDB, updateTask } from '../lib/supabase/client';
 import type { Task } from './components/TaskCard';
 import SolarLoader from './components/SolarLoader';
 

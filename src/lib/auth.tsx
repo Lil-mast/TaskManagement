@@ -50,9 +50,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Firebase mode
       const unsubscribe = onAuthStateChange((firebaseUser) => {
         if (firebaseUser) {
-          // Convert Firebase user to Supabase User format
+          // Use Firebase UID directly for database operations
           const supabaseUser: User = {
-            id: firebaseUser.uid,
+            id: firebaseUser.uid, // Use Firebase UID directly
             email: firebaseUser.email,
             aud: 'authenticated',
             created_at: firebaseUser.metadata.creationTime || new Date().toISOString(),
