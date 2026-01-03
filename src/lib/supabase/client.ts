@@ -14,9 +14,19 @@ import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || '';
 const supabaseServiceKey = import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+
+// Debug logging
+console.log('Supabase URL:', supabaseUrl);
+console.log('Service Key present:', !!supabaseServiceKey);
+console.log('Service Key length:', supabaseServiceKey.length);
+console.log('Anon Key present:', !!supabaseAnonKey);
+
+// Use service role if available, otherwise fallback to anon key
+const supabaseKey = supabaseServiceKey || supabaseAnonKey;
 
 // Use service role for database operations (bypasses RLS for Firebase auth)
-export const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+export const supabase = createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
