@@ -38,7 +38,7 @@ export default function Signup() {
     try {
       await signUp(formData.email, formData.password);
       // After successful sign up, redirect to dashboard
-      navigate('/');
+      navigate('/app');
     } catch (error) {
       console.error('Sign up error:', error);
       alert('Sign up failed. Please try again.');
@@ -52,7 +52,7 @@ export default function Signup() {
     try {
       await signInWithGoogle();
       // After successful Google sign in, redirect to dashboard
-      navigate('/');
+      navigate('/app');
     } catch (error) {
       console.error('Google sign in error:', error);
       alert('Google sign in failed.');
@@ -63,7 +63,7 @@ export default function Signup() {
 
   // If user is already signed in, redirect to dashboard
   if (user) {
-    navigate('/');
+    navigate('/app');
     return null;
   }
 

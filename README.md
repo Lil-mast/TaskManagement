@@ -14,9 +14,9 @@ npm run dev
 In local mode:
 - Tasks are saved in your browser's localStorage
 - No authentication required
-- Perfect for testing the UI and functionality
+- Perfect for testing UI and functionality
 
-## Supabase Integration (Optional)
+## Firebase + Supabase Integration (Recommended)
 
 For persistent, multi-device storage with user authentication:
 
@@ -25,7 +25,22 @@ For persistent, multi-device storage with user authentication:
    npm install
    ```
 
-2. Set up Supabase:
+2. Set up Firebase (Authentication):
+   - Create a new project at [Firebase Console](https://console.firebase.google.com/)
+   - Go to Authentication > Sign-in method
+   - Enable Email/Password and Google providers
+   - Get Firebase configuration from Project Settings > General
+   - Update `.env.local` with your Firebase credentials:
+     ```
+     VITE_FIREBASE_API_KEY=your-firebase-api-key
+     VITE_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+     VITE_FIREBASE_PROJECT_ID=your-project-id
+     VITE_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+     VITE_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+     VITE_FIREBASE_APP_ID=your-app-id
+     ```
+
+3. Set up Supabase (Database):
    - Create a new project at [supabase.com](https://supabase.com)
    - Go to Settings > API to get your project URL and anon key
    - Update `.env.local` with your Supabase credentials:
@@ -34,19 +49,9 @@ For persistent, multi-device storage with user authentication:
      VITE_SUPABASE_ANON_KEY=your-anon-key
      ```
 
-3. Set up Google OAuth:
-   - In Supabase Dashboard, go to Authentication > Providers
-   - Enable Google provider
-   - Get Google Client ID and Secret from [Google Cloud Console](https://console.cloud.google.com/)
-     - Create a new project or select existing
-     - Enable Google+ API
-     - Create OAuth 2.0 credentials
-     - Add authorized redirect URIs: `https://your-project-ref.supabase.co/auth/v1/callback`
-   - Enter Client ID and Secret in Supabase
-
-4. Set up the database:
+4. Set up database:
    - In Supabase Dashboard, go to SQL Editor
-   - Run the SQL from `supabase-schema.sql` to create the tasks table and policies
+   - Run the SQL from `supabase-schema.sql` to create tasks table and policies
 
 ## Running the app
 
@@ -59,6 +64,10 @@ The app will be available at `http://localhost:5173` (or the port shown in termi
 ## Features
 
 - **Local Mode**: Works immediately with browser storage
-- **Supabase Mode**: User authentication with Google, persistent storage
+- **Firebase Authentication**: Email/password and Google OAuth login
+- **Supabase Database**: Persistent task storage across devices
 - **Eisenhower Matrix**: Organize tasks by urgency and importance
-- **Real-time Updates**: Tasks sync across devices (in Supabase mode)
+- **Real-time Updates**: Tasks sync across devices (in authenticated mode)
+- **Drag & Drop**: Move tasks between quadrants
+- **Task Editing**: Inline editing with descriptions
+- **Responsive Design**: Works on desktop and mobile

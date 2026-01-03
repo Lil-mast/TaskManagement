@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { TaskCard, type Task } from './TaskCard';
+import { useDrop } from 'react-dnd';
+import { DraggableTaskCard, TASK_TYPE } from './DraggableTaskCard';
+import type { Task } from './TaskCard';
 
 interface MatrixQuadrantProps {
   title: string;
@@ -7,8 +9,11 @@ interface MatrixQuadrantProps {
   headerColor: string;
   icon: string;
   tasks: Task[];
-  onAddTask: (text: string) => void;
+  onAddTask: (text: string, description?: string) => void;
   onDeleteTask: (id: string) => void;
+  onUpdateTask?: (id: string, title: string, description?: string) => void;
+  onMoveTask?: (taskId: string, fromQuadrant: string, toQuadrant: string) => void;
+  quadrant: string;
 }
 
 export function MatrixQuadrant({
@@ -19,21 +24,42 @@ export function MatrixQuadrant({
   tasks,
   onAddTask,
   onDeleteTask,
+  onUpdateTask,
+  onMoveTask,
+  quadrant,
 }: MatrixQuadrantProps) {
   const [isAdding, setIsAdding] = useState(false);
   const [newTaskText, setNewTaskText] = useState('');
+  const [newTaskDescription, setNewTaskDescription] = useState('');
+
+  const [{ isOver, canDrop }, drop] = useDrop(() => ({
+    accept: TASK_TYPE,
+    drop: (item: { id: string; currentQuadrant: string }) => {
+      if (item.currentQuadrant !== quadrant && onMoveTask) {
+        onMoveTask(item.id, item.currentQuadrant, quadrant);
+      }
+    },
+    collect: (monitor) => ({
+      isOver: monitor.isOver(),
+      canDrop: monitor.canDrop(),
+    }),
+  }));
+
+  const dropRef = drop;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (newTaskText.trim()) {
-      onAddTask(newTaskText.trim());
+      onAddTask(newTaskText.trim(), newTaskDescription.trim() || undefined);
       setNewTaskText('');
+      setNewTaskDescription('');
       setIsAdding(false);
     }
   };
 
   const handleCancel = () => {
     setNewTaskText('');
+    setNewTaskDescription('');
     setIsAdding(false);
   };
 
@@ -51,10 +77,22 @@ export function MatrixQuadrant({
         </div>
       </div>
       {/* Card Body */}
-      <div className="lined-paper flex-grow p-4 overflow-y-auto custom-scroll font-hand text-2xl text-vintage-brown">
+      <div 
+        ref={dropRef as any}
+        className={`lined-paper flex-grow p-4 overflow-y-auto custom-scroll font-hand text-2xl text-vintage-brown ${
+          isOver && canDrop ? 'bg-blue-50 border-2 border-blue-300' : ''
+        }`}
+      >
         <ul className="list-none space-y-0">
           {tasks.map((task) => (
-            <TaskCard key={task.id} task={task} onDelete={onDeleteTask} />
+            <DraggableTaskCard 
+              key={task.id} 
+              task={task} 
+              onDelete={onDeleteTask}
+              onUpdate={onUpdateTask}
+              onMove={onMoveTask ? (taskId, targetQuadrant) => onMoveTask(taskId, quadrant, targetQuadrant) : undefined}
+              currentQuadrant={quadrant}
+            />
           ))}
         </ul>
       </div>
@@ -68,6 +106,13 @@ export function MatrixQuadrant({
               placeholder="Enter task description..."
               className="w-full p-2 border border-card-border rounded bg-parchment text-vintage-brown font-hand text-xl"
               autoFocus
+            />
+            <textarea
+              value={newTaskDescription}
+              onChange={(e) => setNewTaskDescription(e.target.value)}
+              placeholder="Add description (optional)..."
+              className="w-full p-2 border border-card-border rounded bg-parchment text-vintage-brown font-hand text-sm resize-none"
+              rows={2}
             />
             <div className="flex gap-2">
               <button

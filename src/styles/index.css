@@ -281,3 +281,14 @@ body {
     background: #8e7855;
     border-radius: 5px;
 }
+
+/* Solar System Loader Animations */
+@keyframes orbit3d {
+  0% { transform: rotateX(20deg) rotateY(0deg); }
+  100% { transform: rotateX(20deg) rotateY(-360deg); }
+}
+
+@keyframes tilt {
+  0%, 100% { transform: rotateX(10deg) rotateY(0deg); }
+  50% { transform: rotateX(-10deg) rotateY(10deg); }
+}

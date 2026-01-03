@@ -27,7 +27,7 @@ export default function Login() {
     try {
       await signIn(formData.email, formData.password);
       // After successful sign in, redirect to dashboard
-      navigate('/');
+      navigate('/app');
     } catch (error) {
       console.error('Sign in error:', error);
       alert('Sign in failed. Please check your credentials.');
@@ -41,7 +41,7 @@ export default function Login() {
     try {
       await signInWithGoogle();
       // After successful Google sign in, redirect to dashboard
-      navigate('/');
+      navigate('/app');
     } catch (error) {
       console.error('Google sign in error:', error);
       alert('Google sign in failed.');
@@ -52,7 +52,7 @@ export default function Login() {
 
   // If user is already signed in, redirect to dashboard
   if (user) {
-    navigate('/');
+    navigate('/app');
     return null;
   }
 

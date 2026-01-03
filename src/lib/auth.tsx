@@ -1,16 +1,25 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { User, Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured, signInWithGoogle } from './supabase';
+import { User } from '@supabase/supabase-js';
+import { 
+  signInWithEmail, 
+  signUpWithEmail, 
+  signInWithGoogle, 
+  signOut as firebaseSignOut,
+  onAuthStateChange,
+  isFirebaseConfigured 
+} from './firebase';
+import { supabase, isSupabaseConfigured } from './supabase';
 
 interface AuthContextType {
   user: User | null;
-  session: Session | null;
+  session: any;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
   isSupabaseMode: boolean;
+  isFirebaseMode: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -25,38 +34,58 @@ export const useAuth = () => {
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!isSupabaseConfigured) {
+    if (!isFirebaseConfigured && !isSupabaseConfigured) {
       // Local mode - no auth required
-      setUser({ id: 'local-user' } as User); // Mock user for local mode
+      setUser({ id: 'local-user' } as User);
       setSession(null);
       setLoading(false);
       return;
     }
 
-    // Supabase mode
-    supabase!.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      setLoading(false);
-    });
-
-    const { data: { subscription } } = supabase!.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+    if (isFirebaseConfigured) {
+      // Firebase mode
+      const unsubscribe = onAuthStateChange((firebaseUser) => {
+        if (firebaseUser) {
+          // Convert Firebase user to Supabase User format
+          const supabaseUser: User = {
+            id: firebaseUser.uid,
+            email: firebaseUser.email,
+            aud: 'authenticated',
+            created_at: firebaseUser.metadata.creationTime || new Date().toISOString(),
+            user_metadata: {
+              name: firebaseUser.displayName,
+              photo_url: firebaseUser.photoURL
+            },
+            app_metadata: {},
+            phone: firebaseUser.phoneNumber
+          } as User;
+          setUser(supabaseUser);
+          setSession({ user: supabaseUser });
+        } else {
+          setUser(null);
+          setSession(null);
+        }
         setLoading(false);
-      }
-    );
+      });
 
-    return () => subscription.unsubscribe();
+      return unsubscribe;
+    } else {
+      // Fallback to local mode
+      setUser({ id: 'local-user' } as User);
+      setSession(null);
+      setLoading(false);
+    }
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    if (!isSupabaseConfigured) {
+    if (isFirebaseConfigured) {
+      const result = await signInWithEmail(email, password);
+      // Auth state change will handle setting the user
+    } else {
       // In local mode, simulate successful sign in
       const mockUser = {
         id: 'local-user',
@@ -68,17 +97,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as User;
       setUser(mockUser);
       setSession(null);
-      return;
     }
-    const { error } = await supabase!.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) throw error;
   };
 
   const signUp = async (email: string, password: string) => {
-    if (!isSupabaseConfigured) {
+    if (isFirebaseConfigured) {
+      const result = await signUpWithEmail(email, password);
+      // Auth state change will handle setting the user
+    } else {
       // In local mode, simulate successful sign up
       const mockUser = {
         id: 'local-user',
@@ -90,32 +116,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } as User;
       setUser(mockUser);
       setSession(null);
-      return;
     }
-    const { error } = await supabase!.auth.signUp({
-      email,
-      password,
-    });
-    if (error) throw error;
   };
 
   const signInWithGoogleAuth = async () => {
-    if (!isSupabaseConfigured) {
+    if (!isFirebaseConfigured) {
       throw new Error('Google authentication not available in local mode');
     }
-    const { error } = await signInWithGoogle();
-    if (error) throw error;
+    const result = await signInWithGoogle();
+    // Auth state change will handle setting the user
   };
 
   const signOutUser = async () => {
-    if (!isSupabaseConfigured) {
+    if (isFirebaseConfigured) {
+      await firebaseSignOut();
+    } else {
       // In local mode, just clear the mock user
       setUser(null);
       setSession(null);
-      return;
     }
-    const { error } = await supabase!.auth.signOut();
-    if (error) throw error;
   };
 
   const value = {
@@ -127,6 +146,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signInWithGoogle: signInWithGoogleAuth,
     signOutUser,
     isSupabaseMode: isSupabaseConfigured,
+    isFirebaseMode: isFirebaseConfigured,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

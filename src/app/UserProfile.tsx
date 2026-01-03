@@ -35,7 +35,7 @@ export default function UserProfile() {
     // In a real app, this would save to a backend
     alert('Profile completed successfully!');
     // Redirect to dashboard after profile completion
-    navigate('/');
+    navigate('/app');
   };
 
   return (
@@ -50,7 +50,7 @@ export default function UserProfile() {
           </div>
           <div className="flex items-center gap-6">
             <Link
-              to="/"
+              to="/app"
               className="text-white hover:text-vintage-cream transition-colors font-medium"
             >
               Dashboard
@@ -316,7 +316,7 @@ export default function UserProfile() {
             </a>
           </nav>
           <p className="text-xs opacity-60 font-serif tracking-widest">
-            © 1948 Eisenhower Matrix Systems. All Rights Reserved.
+            © 2026 Eisenhower Matrix Systems. All Rights Reserved.
           </p>
         </div>
       </footer>
