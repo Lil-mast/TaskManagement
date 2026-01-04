@@ -211,7 +211,7 @@ This project is open source and available under the [MIT License](LICENSE).
 
 - Email: christiantazma77@gmail.com
 - GitHub: [Lil-mast](https://github.com/Lil-mast)
-- LinkedIn: [Your LinkedIn Profile]
+- LinkedIn: https://www.linkedin.com/in/christian-tazma-3b39342a2/
 
 ---
 
