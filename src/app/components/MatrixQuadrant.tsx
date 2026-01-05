@@ -13,6 +13,7 @@ interface MatrixQuadrantProps {
   onDeleteTask: (id: string) => void;
   onUpdateTask?: (id: string, title: string, description?: string) => void;
   onMoveTask?: (taskId: string, fromQuadrant: string, toQuadrant: string) => void;
+  onWellDone?: (task: Task) => void;
   quadrant: string;
 }
 
@@ -26,6 +27,7 @@ export function MatrixQuadrant({
   onDeleteTask,
   onUpdateTask,
   onMoveTask,
+  onWellDone,
   quadrant,
 }: MatrixQuadrantProps) {
   const [isAdding, setIsAdding] = useState(false);
@@ -90,6 +92,7 @@ export function MatrixQuadrant({
               task={task} 
               onDelete={onDeleteTask}
               onUpdate={onUpdateTask}
+              onWellDone={onWellDone}
               onMove={onMoveTask ? (taskId, targetQuadrant) => onMoveTask(taskId, quadrant, targetQuadrant) : undefined}
               currentQuadrant={quadrant}
             />

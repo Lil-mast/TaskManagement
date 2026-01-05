@@ -2,8 +2,11 @@ import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MatrixQuadrant } from './components/MatrixQuadrant';
 import { DNDProviderWrapper } from './components/DNDProvider';
+import { TrashViewer } from './components/TrashViewer';
+import { MonthlyReport } from './components/MonthlyReport';
 import { useAuth } from '../lib/auth';
 import { getTasks, addTask, deleteTask as deleteTaskFromDB, updateTask } from '../lib/supabase/client';
+import { TrashManager } from '../lib/trashManager';
 import type { Task } from './components/TaskCard';
 import SolarLoader from './components/SolarLoader';
 
@@ -26,6 +29,10 @@ export default function App() {
     not_urgent_not_important: [],
   });
   const [loadingTasks, setLoadingTasks] = useState(false);
+  const [showTrash, setShowTrash] = useState(false);
+  const [showReport, setShowReport] = useState(false);
+  const [motivationQuote, setMotivationQuote] = useState<string | null>(null);
+  const [showMotivation, setShowMotivation] = useState(false);
 
   // Redirect authenticated users to dashboard, non-authenticated users to landing page
   useEffect(() => {
@@ -264,6 +271,27 @@ export default function App() {
     }
   };
 
+  const handleWellDone = (task: Task) => {
+    // Add task to trash and get motivation quote
+    const quote = TrashManager.addToTrash(task);
+    
+    // Show motivation popup
+    setMotivationQuote(quote);
+    setShowMotivation(true);
+    setTimeout(() => setShowMotivation(false), 5000);
+
+    // Remove task from current quadrant
+    const quadrant = task.quadrant as keyof TasksByQuadrant;
+    setTasks(prev => {
+      const newTasks = {
+        ...prev,
+        [quadrant]: prev[quadrant].filter(t => t.id !== task.id)
+      };
+      saveTasksToLocalStorage(newTasks);
+      return newTasks;
+    });
+  };
+
   return (
     <DNDProviderWrapper>
       <div className="relative font-serif">
@@ -283,6 +311,18 @@ export default function App() {
               >
                 Dashboard
               </Link>
+              <button
+                onClick={() => setShowReport(!showReport)}
+                className="text-white hover:text-vintage-cream transition-colors font-medium"
+              >
+                {showReport ? 'Back to Tasks' : 'Monthly Report'}
+              </button>
+              <button
+                onClick={() => setShowTrash(!showTrash)}
+                className="text-white hover:text-vintage-cream transition-colors font-medium"
+              >
+                {showTrash ? 'Back to Tasks' : 'Trash'}
+              </button>
               <Link
                 to="/profile"
                 className="text-white hover:text-vintage-cream transition-colors font-medium"
@@ -300,6 +340,19 @@ export default function App() {
         </nav>
         {/* END: Navigation Header */}
 
+        {/* Motivation Quote Popup */}
+        {showMotivation && motivationQuote && (
+          <div className="fixed top-20 right-4 z-50 max-w-md bg-gradient-to-r from-purple-500 to-pink-500 text-white p-4 rounded-lg shadow-lg transform transition-all duration-300 ease-in-out">
+            <div className="flex items-start gap-3">
+              <span className="text-2xl">⭐</span>
+              <div>
+                <p className="font-semibold">Well Done!</p>
+                <p className="text-sm">{motivationQuote}</p>
+              </div>
+            </div>
+          </div>
+        )}
+
       {/* BEGIN: Main Content */}
       <main className="relative z-10 container mx-auto px-4 py-8 md:py-12 min-h-screen flex flex-col items-center">
         {/* BEGIN: Header Section */}
@@ -314,16 +367,23 @@ export default function App() {
         {/* END: Header Section */}
 
         {/* Task Loading State */}
-        {loadingTasks && (
+        {loadingTasks && !showTrash && !showReport && (
           <div className="flex flex-col items-center justify-center py-12">
             <SolarLoader size={25} speed={1.5} className="mb-6" />
             <p className="text-vintage-brown font-serif text-lg">Loading your tasks...</p>
           </div>
         )}
 
-        {/* BEGIN: Matrix Grid */}
-        {!loadingTasks && (
-          <section className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-6xl">
+        {/* Show Report, Trash, or Matrix */}
+        {showReport ? (
+          <MonthlyReport userId={user?.id || 'local-user'} boardId="default" />
+        ) : showTrash ? (
+          <TrashViewer onClose={() => setShowTrash(false)} />
+        ) : (
+          <>
+            {/* BEGIN: Matrix Grid */}
+            {!loadingTasks && (
+              <section className="grid grid-cols-1 md:grid-cols-2 gap-5 w-full max-w-6xl">
           {/* QUADRANT 1: DO (Important & Urgent) */}
           <MatrixQuadrant
             title="Do"
@@ -335,6 +395,7 @@ export default function App() {
             onDeleteTask={(id) => deleteTaskFromApp('urgent_important', id)}
             onUpdateTask={updateTaskInApp}
             onMoveTask={moveTaskBetweenQuadrants}
+            onWellDone={handleWellDone}
             quadrant="urgent_important"
           />
 
@@ -349,6 +410,7 @@ export default function App() {
             onDeleteTask={(id) => deleteTaskFromApp('not_urgent_important', id)}
             onUpdateTask={updateTaskInApp}
             onMoveTask={moveTaskBetweenQuadrants}
+            onWellDone={handleWellDone}
             quadrant="not_urgent_important"
           />
 
@@ -363,6 +425,7 @@ export default function App() {
             onDeleteTask={(id) => deleteTaskFromApp('urgent_not_important', id)}
             onUpdateTask={updateTaskInApp}
             onMoveTask={moveTaskBetweenQuadrants}
+            onWellDone={handleWellDone}
             quadrant="urgent_not_important"
           />
 
@@ -377,9 +440,13 @@ export default function App() {
             onDeleteTask={(id) => deleteTaskFromApp('not_urgent_not_important', id)}
             onUpdateTask={updateTaskInApp}
             onMoveTask={moveTaskBetweenQuadrants}
+            onWellDone={handleWellDone}
             quadrant="not_urgent_not_important"
           />
         </section>
+            )}
+            {/* END: Matrix Grid */}
+          </>
         )}
         {/* END: Matrix Grid */}
       </main>

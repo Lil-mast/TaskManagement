@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Trash2, Edit2, Check, X } from 'lucide-react';
+import { Trash2, Edit2, Check, X, Star } from 'lucide-react';
 
 export interface Task {
   id: string;
@@ -14,9 +14,10 @@ interface TaskCardProps {
   task: Task;
   onDelete: (id: string) => void;
   onUpdate?: (id: string, title: string, description?: string) => void;
+  onWellDone?: (task: Task) => void;
 }
 
-export function TaskCard({ task, onDelete, onUpdate }: TaskCardProps) {
+export function TaskCard({ task, onDelete, onUpdate, onWellDone }: TaskCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(task.title);
   const [editDescription, setEditDescription] = useState(task.description || '');
@@ -84,6 +85,19 @@ export function TaskCard({ task, onDelete, onUpdate }: TaskCardProps) {
         )}
       </div>
       <div className="flex gap-1 ml-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        {onWellDone && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onWellDone(task);
+            }}
+            className="text-vintage-brown hover:text-green-600 p-1 transition-colors"
+            aria-label="Mark task as well done"
+            title="Well Done!"
+          >
+            <Star size={14} />
+          </button>
+        )}
         {onUpdate && (
           <button
             onClick={(e) => {

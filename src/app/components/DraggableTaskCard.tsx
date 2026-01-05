@@ -6,6 +6,7 @@ interface DraggableTaskCardProps {
   task: Task;
   onDelete: (id: string) => void;
   onUpdate?: (id: string, title: string, description?: string) => void;
+  onWellDone?: (task: Task) => void;
   onMove?: (taskId: string, targetQuadrant: string) => void;
   currentQuadrant: string;
 }
@@ -16,6 +17,7 @@ export function DraggableTaskCard({
   task, 
   onDelete, 
   onUpdate, 
+  onWellDone,
   onMove, 
   currentQuadrant 
 }: DraggableTaskCardProps) {
@@ -54,7 +56,7 @@ export function DraggableTaskCard({
         transition: 'background-color 0.2s',
       }}
     >
-      <TaskCard task={task} onDelete={onDelete} onUpdate={onUpdate} />
+      <TaskCard task={task} onDelete={onDelete} onUpdate={onUpdate} onWellDone={onWellDone} />
     </div>
   );
 }
