@@ -215,6 +215,6 @@ This project is open source and available under the [MIT License](LICENSE).
 
 ---
 
-Star this repository if it helped you organize your tasks!
+Lets Get to Work shall We...🥸
 
 Built with passion for productivity and beautiful design
