@@ -25,16 +25,28 @@ console.log('Anon Key present:', !!supabaseAnonKey);
 // Use service role if available, otherwise fallback to anon key
 const supabaseKey = supabaseServiceKey || supabaseAnonKey;
 
+// Validate environment variables before creating client
+if (!supabaseUrl) {
+  console.error('Supabase URL is not configured. Please set VITE_SUPABASE_URL in your environment variables.');
+}
+
+if (!supabaseKey) {
+  console.error('Supabase key is not configured. Please set VITE_SUPABASE_ANON_KEY or VITE_SUPABASE_SERVICE_ROLE_KEY in your environment variables.');
+}
+
 // Use service role for database operations (bypasses RLS for Firebase auth)
-export const supabase = createClient(supabaseUrl, supabaseKey, {
+export const supabase = supabaseUrl && supabaseKey ? createClient(supabaseUrl, supabaseKey, {
   auth: {
     autoRefreshToken: false,
     persistSession: false,
   }
-});
+}) : null;
 
 // Database functions
 export const getTasks = async (userId: string) => {
+  if (!supabase) {
+    return { data: [], error: new Error('Supabase not configured') };
+  }
   const { data, error } = await supabase
     .from('tasks')
     .select('*')
@@ -45,6 +57,9 @@ export const getTasks = async (userId: string) => {
 };
 
 export const addTask = async (task: { title: string; description?: string; quadrant: string; user_id: string }) => {
+  if (!supabase) {
+    return { data: null, error: new Error('Supabase not configured') };
+  }
   const { data, error } = await supabase
     .from('tasks')
     .insert([task])
@@ -54,6 +69,9 @@ export const addTask = async (task: { title: string; description?: string; quadr
 };
 
 export const updateTask = async (id: string, updates: any) => {
+  if (!supabase) {
+    return { data: null, error: new Error('Supabase not configured') };
+  }
   const { data, error } = await supabase
     .from('tasks')
     .update(updates)
@@ -64,6 +82,9 @@ export const updateTask = async (id: string, updates: any) => {
 };
 
 export const deleteTask = async (id: string) => {
+  if (!supabase) {
+    return { error: new Error('Supabase not configured') };
+  }
   const { error } = await supabase
     .from('tasks')
     .delete()

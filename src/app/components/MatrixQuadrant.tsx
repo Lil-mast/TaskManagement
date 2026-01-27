@@ -66,10 +66,10 @@ export function MatrixQuadrant({
   };
 
   return (
-    <article className="matrix-card h-80 relative">
+    <article className="matrix-card h-96 relative flex flex-col">
       <div className="matrix-card-border-effect"></div>
       {/* Card Header */}
-      <div className={`card-header ${headerColor} p-4 flex items-center space-x-4`}>
+      <div className={`card-header ${headerColor} p-4 flex items-center space-x-4 flex-shrink-0`}>
         <div className="icon-wrapper">
           <i className={`${icon} icon-style`}></i>
         </div>
@@ -100,7 +100,7 @@ export function MatrixQuadrant({
         </ul>
       </div>
       {/* Card Footer */}
-      <div className="p-3 bg-parchment/30">
+      <div className="p-3 bg-parchment/30 flex-shrink-0">
         {isAdding ? (
           <form onSubmit={handleSubmit} className="space-y-2">
             <input

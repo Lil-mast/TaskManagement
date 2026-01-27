@@ -5,7 +5,7 @@ import { DNDProviderWrapper } from './components/DNDProvider';
 import { TrashViewer } from './components/TrashViewer';
 import { MonthlyReport } from './components/MonthlyReport';
 import { useAuth } from '../lib/auth';
-import { getTasks, addTask, deleteTask as deleteTaskFromDB, updateTask } from '../lib/supabase/client';
+import { getTasks, addTask, deleteTask as deleteTaskFromDB, updateTask } from '../lib/supabase';
 import { TrashManager } from '../lib/trashManager';
 import type { Task } from './components/TaskCard';
 import SolarLoader from './components/SolarLoader';
@@ -18,7 +18,7 @@ interface TasksByQuadrant {
 }
 
 export default function App() {
-  const { user, loading, signIn, signOutUser, isFirebaseMode } = useAuth();
+  const { user, loading, signIn, signOutUser, isFirebaseMode, isSupabaseMode } = useAuth();
   const navigate = useNavigate();
 
   // State declarations
@@ -34,39 +34,11 @@ export default function App() {
   const [motivationQuote, setMotivationQuote] = useState<string | null>(null);
   const [showMotivation, setShowMotivation] = useState(false);
 
-  // Redirect authenticated users to dashboard, non-authenticated users to landing page
-  useEffect(() => {
-    if (!loading) {
-      if (!user && isFirebaseMode) {
-        navigate('/');
-      } else if (user && isFirebaseMode) {
-        navigate('/app');
-      }
-    }
-  }, [user, loading, navigate, isFirebaseMode]);
-
-  // Show loading while checking authentication
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-vintage-cream">
-        <div className="text-center">
-          <SolarLoader size={30} speed={1} className="mb-8" />
-          <p className="text-vintage-brown font-serif text-lg">Loading Eisenhower Matrix...</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Don't render if not authenticated in Firebase mode (will redirect)
-  if (!user && isFirebaseMode) {
-    return null;
-  }
-
   useEffect(() => {
     if (isFirebaseMode && user && user.id !== 'local-user') {
       loadTasks();
-    } else if (!isFirebaseMode) {
-      // Load from localStorage in local mode
+    } else if (!isFirebaseMode && !isSupabaseMode) {
+      // Load from localStorage in local mode (neither Firebase nor Supabase configured)
       const savedTasks = localStorage.getItem('eisenhower-tasks');
       if (savedTasks) {
         try {
@@ -84,7 +56,26 @@ export default function App() {
         not_urgent_not_important: [],
       });
     }
-  }, [user, isFirebaseMode]);
+  }, [user, isFirebaseMode, isSupabaseMode]);
+
+  // Authentication redirect logic is now handled by the router
+
+  // Show loading while checking authentication
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-vintage-cream">
+        <div className="text-center">
+          <SolarLoader size={30} speed={1} className="mb-8" />
+          <p className="text-vintage-brown font-serif text-lg">Loading Eisenhower Matrix...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Don't render if not authenticated in Firebase mode (will redirect)
+  if (!user && isFirebaseMode) {
+    return null;
+  }
 
   const loadTasks = async () => {
     if (!user || !isFirebaseMode) return;
@@ -110,15 +101,15 @@ export default function App() {
   };
 
   const saveTasksToLocalStorage = (newTasks: TasksByQuadrant) => {
-    if (!isFirebaseMode) {
+    if (!isFirebaseMode && !isSupabaseMode) {
       localStorage.setItem('eisenhower-tasks', JSON.stringify(newTasks));
     }
   };
 
   const addTaskToDB = async (quadrant: keyof TasksByQuadrant, title: string, description?: string) => {
-    if (isFirebaseMode && !user) return;
+    if ((isFirebaseMode || isSupabaseMode) && !user) return;
 
-    if (isFirebaseMode) {
+    if (isFirebaseMode || isSupabaseMode) {
       const { data, error } = await addTask({
         title,
         description,
@@ -134,7 +125,7 @@ export default function App() {
         }));
       }
     } else {
-      // Local mode
+      // Local mode - neither Firebase nor Supabase configured
       const newTask: Task = {
         id: Date.now().toString() + Math.random(),
         title,
@@ -155,7 +146,7 @@ export default function App() {
   };
 
   const deleteTaskFromApp = async (quadrant: keyof TasksByQuadrant, taskId: string) => {
-    if (isFirebaseMode) {
+    if (isFirebaseMode || isSupabaseMode) {
       const { error } = await deleteTaskFromDB(taskId);
       if (error) {
         console.error('Error deleting task:', error);
@@ -166,7 +157,7 @@ export default function App() {
         }));
       }
     } else {
-      // Local mode
+      // Local mode - neither Firebase nor Supabase configured
       setTasks((prev) => {
         const newTasks = {
           ...prev,
@@ -194,7 +185,7 @@ export default function App() {
 
     if (!targetQuadrant || taskIndex === -1) return;
 
-    if (isFirebaseMode) {
+    if (isFirebaseMode || isSupabaseMode) {
       const { data, error } = await updateTask(taskId, { title, description });
       if (error) {
         console.error('Error updating task:', error);
@@ -207,7 +198,7 @@ export default function App() {
         }));
       }
     } else {
-      // Local mode
+      // Local mode - neither Firebase nor Supabase configured
       setTasks((prev) => {
         const newTasks = {
           ...prev,
@@ -230,8 +221,8 @@ export default function App() {
     
     if (!taskToMove) return;
 
-    if (isFirebaseMode) {
-      // Update the task's quadrant in Supabase
+    if (isFirebaseMode || isSupabaseMode) {
+      // Update the task's quadrant in database
       const { data, error } = await updateTask(taskId, { quadrant: toQuadrant });
       if (error) {
         console.error('Error moving task:', error);
@@ -253,7 +244,7 @@ export default function App() {
         return newTasks;
       });
     } else {
-      // Local mode - just update local state and save to localStorage
+      // Local mode - neither Firebase nor Supabase configured
       setTasks((prev) => {
         const newTasks = { ...prev };
         // Remove from source
