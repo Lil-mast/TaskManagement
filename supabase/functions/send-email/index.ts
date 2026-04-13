@@ -28,7 +28,7 @@ const welcomeEmailTemplate = (userId: string) => ({
       </p>
       <p style="color: #8B7355; font-size: 14px; text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #D2691E;">
         Happy organizing!<br>
-        <em>The Eisenhower Matrix Team</em>
+        <em>By Software Dev Christian Tazma</em>
       </p>
     </div>
   `
@@ -68,7 +68,7 @@ const streakMilestoneTemplate = (streak: number, userId: string) => ({
         </div>
         <p style="color: #8B7355; font-size: 14px; text-align: center; margin-top: 30px;">
           Congratulations on your dedication!<br>
-          <em>The Eisenhower Matrix Team</em>
+          <em>By Software Dev Christian Tazma</em>
         </p>
       </div>
     </div>
@@ -141,7 +141,7 @@ const weeklySummaryTemplate = (stats: {
 
       <p style="color: #8B7355; font-size: 14px; text-align: center; margin-top: 30px; padding-top: 20px; border-top: 1px solid #D2691E;">
         Keep up the great work!<br>
-        <em>The Eisenhower Matrix Team</em>
+        <em>By Software Dev Christian Tazma</em>
       </p>
     </div>
   `
