@@ -4,8 +4,11 @@ import { MatrixQuadrant } from './components/MatrixQuadrant';
 import { DNDProviderWrapper } from './components/DNDProvider';
 import { TrashViewer } from './components/TrashViewer';
 import { MonthlyReport } from './components/MonthlyReport';
+import { StreakDisplay } from './components/StreakDisplay';
+import { MilestoneToast } from './components/MilestoneToast';
 import { useAuth } from '../lib/auth';
 import { getTasks, addTask, deleteTask as deleteTaskFromDB, updateTask } from '../lib/supabase';
+import { trackTaskCompletion } from '../lib/streaks';
 import { TrashManager } from '../lib/trashManager';
 import type { Task } from './components/TaskCard';
 import SolarLoader from './components/SolarLoader';
@@ -33,6 +36,7 @@ export default function App() {
   const [showReport, setShowReport] = useState(false);
   const [motivationQuote, setMotivationQuote] = useState<string | null>(null);
   const [showMotivation, setShowMotivation] = useState(false);
+  const [milestoneStreak, setMilestoneStreak] = useState<number | null>(null);
 
   useEffect(() => {
     if (isFirebaseMode && user && user.id !== 'local-user') {
@@ -262,7 +266,7 @@ export default function App() {
     }
   };
 
-  const handleWellDone = (task: Task) => {
+  const handleWellDone = async (task: Task) => {
     // Add task to trash and get motivation quote
     const quote = TrashManager.addToTrash(task);
     
@@ -270,6 +274,14 @@ export default function App() {
     setMotivationQuote(quote);
     setShowMotivation(true);
     setTimeout(() => setShowMotivation(false), 5000);
+
+    // Track streak for Supabase users
+    if ((isFirebaseMode || isSupabaseMode) && user && user.id !== 'local-user') {
+      const result = await trackTaskCompletion(user.id, task.id, task.quadrant);
+      if (result.success && result.milestoneReached && result.streak) {
+        setMilestoneStreak(result.streak);
+      }
+    }
 
     // Remove task from current quadrant
     const quadrant = task.quadrant as keyof TasksByQuadrant;
@@ -341,6 +353,21 @@ export default function App() {
                 <p className="text-sm">{motivationQuote}</p>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Milestone Toast */}
+        {milestoneStreak && (
+          <MilestoneToast
+            streak={milestoneStreak}
+            onClose={() => setMilestoneStreak(null)}
+          />
+        )}
+
+        {/* Streak Display - only for authenticated users */}
+        {user && user.id !== 'local-user' && (isFirebaseMode || isSupabaseMode) && (
+          <div className="fixed top-24 left-4 z-40 w-80">
+            <StreakDisplay userId={user.id} />
           </div>
         )}
 
