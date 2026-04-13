@@ -1,13 +1,17 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User } from '@supabase/supabase-js';
-import { 
-  signInWithEmail, 
-  signUpWithEmail, 
-  signInWithGoogle, 
+import {
+  signInWithEmail,
+  signUpWithEmail,
+  signInWithGoogle,
   signOut as firebaseSignOut,
   onAuthStateChange,
-  isFirebaseConfigured 
+  isFirebaseConfigured,
+  signInWithPhone,
+  confirmPhoneCode,
+  setupRecaptcha
 } from './firebase';
+import { ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 import { supabase, isSupabaseConfigured } from './supabase';
 
 interface AuthContextType {
@@ -18,6 +22,9 @@ interface AuthContextType {
   signUp: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   signOutUser: () => Promise<void>;
+  signInWithPhone: (phoneNumber: string, appVerifier: RecaptchaVerifier) => Promise<ConfirmationResult>;
+  confirmPhoneCode: (confirmationResult: ConfirmationResult, code: string) => Promise<void>;
+  setupRecaptcha: (containerId: string) => RecaptchaVerifier;
   isSupabaseMode: boolean;
   isFirebaseMode: boolean;
 }
@@ -137,6 +144,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
+  const signInWithPhoneAuth = async (phoneNumber: string, appVerifier: RecaptchaVerifier): Promise<ConfirmationResult> => {
+    if (!isFirebaseConfigured) {
+      throw new Error('Phone authentication not available in local mode');
+    }
+    return await signInWithPhone(phoneNumber, appVerifier);
+  };
+
+  const confirmPhoneCodeAuth = async (confirmationResult: ConfirmationResult, code: string) => {
+    if (!isFirebaseConfigured) {
+      throw new Error('Phone authentication not available in local mode');
+    }
+    await confirmPhoneCode(confirmationResult, code);
+    // Auth state change will handle setting the user
+  };
+
+  const setupRecaptchaAuth = (containerId: string): RecaptchaVerifier => {
+    if (!isFirebaseConfigured) {
+      throw new Error('Phone authentication not available in local mode');
+    }
+    return setupRecaptcha(containerId);
+  };
+
   const value = {
     user,
     session,
@@ -145,6 +174,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signUp,
     signInWithGoogle: signInWithGoogleAuth,
     signOutUser,
+    signInWithPhone: signInWithPhoneAuth,
+    confirmPhoneCode: confirmPhoneCodeAuth,
+    setupRecaptcha: setupRecaptchaAuth,
     isSupabaseMode: isSupabaseConfigured,
     isFirebaseMode: isFirebaseConfigured,
   };

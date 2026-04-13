@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
+import { ConfirmationResult, RecaptchaVerifier } from 'firebase/auth';
 
 export default function Login() {
-  const { signIn, signInWithGoogle, user, isFirebaseMode } = useAuth();
+  const { signIn, signInWithGoogle, signInWithPhone, confirmPhoneCode, setupRecaptcha, user, isFirebaseMode } = useAuth();
   const navigate = useNavigate();
   const [formData, setFormData] = useState({
     email: '',
@@ -11,6 +12,11 @@ export default function Login() {
     rememberMe: false
   });
   const [isLoading, setIsLoading] = useState(false);
+  const [showPhoneAuth, setShowPhoneAuth] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+  const recaptchaVerifierRef = useRef<RecaptchaVerifier | null>(null);
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value, type, checked } = e.target;
@@ -45,6 +51,44 @@ export default function Login() {
     } catch (error) {
       console.error('Google sign in error:', error);
       alert('Google sign in failed.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleSendPhoneCode = async () => {
+    if (!phoneNumber) {
+      alert('Please enter a phone number');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      const verifier = setupRecaptcha('phone-recaptcha-container');
+      recaptchaVerifierRef.current = verifier;
+      const result = await signInWithPhone(phoneNumber, verifier);
+      setConfirmationResult(result);
+      alert('Verification code sent!');
+    } catch (error) {
+      console.error('Phone sign in error:', error);
+      alert('Failed to send verification code. Please check the phone number format (include country code, e.g., +1234567890).');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyPhoneCode = async () => {
+    if (!verificationCode || !confirmationResult) {
+      alert('Please enter the verification code');
+      return;
+    }
+    setIsLoading(true);
+    try {
+      await confirmPhoneCode(confirmationResult, verificationCode);
+      // Auth state change will handle setting the user and redirect
+      navigate('/app');
+    } catch (error) {
+      console.error('Code verification error:', error);
+      alert('Invalid verification code. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -166,6 +210,92 @@ export default function Login() {
                 />
                 Sign in with Google
               </button>
+
+              {/* Phone Sign In */}
+              {!showPhoneAuth ? (
+                <button
+                  className="w-full flex justify-center items-center py-2.5 px-4 border border-gray-300 rounded shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  type="button"
+                  onClick={() => setShowPhoneAuth(true)}
+                  disabled={isLoading}
+                >
+                  <svg className="h-5 w-5 mr-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
+                  </svg>
+                  Sign in with Phone
+                </button>
+              ) : (
+                <div className="space-y-4 border-t border-gray-200 pt-4">
+                  {!confirmationResult ? (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Phone Number
+                        </label>
+                        <input
+                          type="tel"
+                          placeholder="+1234567890"
+                          value={phoneNumber}
+                          onChange={(e) => setPhoneNumber(e.target.value)}
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-vintage-slate focus:ring-vintage-slate sm:text-sm py-2 px-3"
+                          disabled={isLoading}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Include country code (e.g., +1 for US)</p>
+                      </div>
+                      <div id="phone-recaptcha-container"></div>
+                      <button
+                        className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-vintage-btn hover:bg-vintage-btnHover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-vintage-slate transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        type="button"
+                        onClick={handleSendPhoneCode}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? 'Sending...' : 'Send Code'}
+                      </button>
+                      <button
+                        className="w-full text-sm text-gray-500 hover:text-gray-700"
+                        type="button"
+                        onClick={() => setShowPhoneAuth(false)}
+                      >
+                        Cancel
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          Verification Code
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="Enter 6-digit code"
+                          value={verificationCode}
+                          onChange={(e) => setVerificationCode(e.target.value)}
+                          className="block w-full rounded-md border-gray-300 shadow-sm focus:border-vintage-slate focus:ring-vintage-slate sm:text-sm py-2 px-3"
+                          disabled={isLoading}
+                        />
+                      </div>
+                      <button
+                        className="w-full flex justify-center py-2.5 px-4 border border-transparent rounded shadow-sm text-sm font-medium text-white bg-vintage-btn hover:bg-vintage-btnHover focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-vintage-slate transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        type="button"
+                        onClick={handleVerifyPhoneCode}
+                        disabled={isLoading}
+                      >
+                        {isLoading ? 'Verifying...' : 'Verify Code'}
+                      </button>
+                      <button
+                        className="w-full text-sm text-gray-500 hover:text-gray-700"
+                        type="button"
+                        onClick={() => {
+                          setConfirmationResult(null);
+                          setVerificationCode('');
+                        }}
+                      >
+                        Back
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
 
               {/* Signup Link */}
               <div className="text-center mt-4">

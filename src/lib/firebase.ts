@@ -1,13 +1,17 @@
 import { initializeApp } from 'firebase/app';
-import { 
-  getAuth, 
-  signInWithEmailAndPassword, 
+import {
+  getAuth,
+  signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   signInWithPopup,
   GoogleAuthProvider,
   signOut as firebaseSignOut,
   onAuthStateChanged,
-  User
+  User,
+  signInWithPhoneNumber,
+  PhoneAuthProvider,
+  RecaptchaVerifier,
+  ConfirmationResult
 } from 'firebase/auth';
 
 // Firebase configuration
@@ -51,4 +55,24 @@ export const signOut = async () => {
 export const onAuthStateChange = (callback: (user: User | null) => void) => {
   if (!auth) return () => {};
   return onAuthStateChanged(auth, callback);
+};
+
+// Phone auth functions
+export const signInWithPhone = async (phoneNumber: string, appVerifier: RecaptchaVerifier): Promise<ConfirmationResult> => {
+  if (!auth) throw new Error('Firebase not configured');
+  return await signInWithPhoneNumber(auth, phoneNumber, appVerifier);
+};
+
+export const confirmPhoneCode = async (confirmationResult: ConfirmationResult, code: string) => {
+  if (!confirmationResult) throw new Error('No confirmation result available');
+  return await confirmationResult.confirm(code);
+};
+
+export const setupRecaptcha = (containerId: string): RecaptchaVerifier => {
+  if (!auth) throw new Error('Firebase not configured');
+  return new RecaptchaVerifier(auth, containerId, {
+    size: 'invisible',
+    callback: () => {},
+    'expired-callback': () => {}
+  });
 };
