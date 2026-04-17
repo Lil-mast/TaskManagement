@@ -48,9 +48,26 @@ export default function Login() {
       await signInWithGoogle();
       // After successful Google sign in, redirect to dashboard
       navigate('/app');
-    } catch (error) {
+    } catch (error: any) {
       console.error('Google sign in error:', error);
-      alert('Google sign in failed.');
+      const errorCode = error?.code || '';
+      const errorMessage = error?.message || '';
+
+      let userMessage = 'Google sign in failed.';
+      if (errorCode === 'auth/popup-blocked') {
+        userMessage = 'Popup was blocked. Please allow popups for this site.';
+      } else if (errorCode === 'auth/popup-closed-by-user') {
+        userMessage = 'Sign in was cancelled. Please try again.';
+      } else if (errorCode === 'auth/unauthorized-domain') {
+        userMessage = 'This domain is not authorized. Please add it in Firebase Console > Authentication > Settings > Authorized domains.';
+      } else if (errorCode === 'auth/configuration-not-found') {
+        userMessage = 'Google sign-in is not enabled. Please enable it in Firebase Console > Authentication > Sign-in method.';
+      } else if (errorCode === 'auth/network-request-failed') {
+        userMessage = 'Network error. Please check your internet connection.';
+      } else if (errorMessage) {
+        userMessage = `Google sign in failed: ${errorMessage}`;
+      }
+      alert(userMessage);
     } finally {
       setIsLoading(false);
     }
