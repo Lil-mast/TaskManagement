@@ -128,7 +128,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const signInWithGoogleAuth = async () => {
     if (!isFirebaseConfigured) {
-      throw new Error('Google authentication not available in local mode');
+      throw new Error(
+        'Firebase authentication is not configured. ' +
+        'Please ensure VITE_FIREBASE_* environment variables are set in your .env file ' +
+        'and the app has been rebuilt after adding them.'
+      );
     }
     const result = await signInWithGoogle();
     // Auth state change will handle setting the user
