@@ -24,6 +24,36 @@ A beautiful, vintage-styled task management application built with React, TypeSc
 - **Local Mode**: Works immediately without setup
 - **Protected Credentials**: Environment variables properly secured
 
+## Coming Soon
+
+### Integrations
+- **Calendar Sync**: Connect with Google Calendar, Outlook, and Apple Calendar to automatically schedule tasks
+- **Slack/Discord Integration**: Get task notifications and create tasks directly from messaging apps
+- **GitHub/GitLab**: Link code commits and pull requests to project tasks
+- **Notion/Evernote**: Import and export notes as tasks
+- **Email Integration**: Create tasks from emails and get daily task summaries
+
+### AI-Powered Features
+- **Smart Task Prioritization**: AI analyzes your work patterns and suggests optimal task ordering
+- **Automatic Task Categorization**: AI reads task descriptions and auto-suggests the right quadrant
+- **Deadline Prediction**: AI estimates realistic deadlines based on task complexity and your history
+- **Smart Reminders**: Context-aware notifications that learn when you're most productive
+- **Task Breakdown**: AI helps break large tasks into manageable subtasks
+- **Sentiment Analysis**: Detects urgency and importance from task text automatically
+
+### User Onboarding
+- **Interactive Questionnaire**: Personalized setup quiz to understand work style and preferences
+- **Quick Tutorial**: Guided walkthrough of the Eisenhower Matrix methodology
+- **Sample Tasks**: Pre-populated example tasks to help users get started immediately
+- **Productivity Tips**: AI-generated personalized tips based on usage patterns
+
+### Advanced Features
+- **Team Collaboration**: Share quadrants and delegate tasks with team members
+- **Analytics Dashboard**: Visual insights into productivity patterns and task completion rates
+- **Streaks & Gamification**: Build productive habits with daily streaks and achievements
+- **Voice Input**: Create tasks using voice commands
+- **Offline Mode Enhanced**: Full functionality without internet with smart sync when reconnected
+
 ## Quick Start
 
 ### Option 1: Local Mode (Instant Setup)
