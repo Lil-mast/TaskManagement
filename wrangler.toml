@@ -4,6 +4,7 @@ compatibility_date = "2024-01-01"
 
 [assets]
 directory = "./dist"
+binding = "ASSETS"
 
 # Environment variables - add your values here or use Cloudflare dashboard
 [vars]
