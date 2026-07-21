@@ -39,7 +39,7 @@ export default function App() {
   const [milestoneStreak, setMilestoneStreak] = useState<number | null>(null);
 
   useEffect(() => {
-    if (isFirebaseMode && user && user.id !== 'local-user') {
+    if ((isFirebaseMode || isSupabaseMode) && user && user.id !== 'local-user') {
       loadTasks();
     } else if (!isFirebaseMode && !isSupabaseMode) {
       // Load from localStorage in local mode (neither Firebase nor Supabase configured)
@@ -76,8 +76,9 @@ export default function App() {
     );
   }
 
-  // Don't render if not authenticated in Firebase mode (will redirect)
+  // Redirect to login if not authenticated in Firebase mode
   if (!user && isFirebaseMode) {
+    navigate('/login');
     return null;
   }
 
