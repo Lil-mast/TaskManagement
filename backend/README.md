@@ -1,179 +1,125 @@
-# Task Management Backend
+# Growth Copilot Backend (Rust · Axum)
 
-A robust REST API backend for the Eisenhower Matrix task management application, built with Node.js, Express, and TypeScript. Features authentication, task management, and user preferences with Supabase integration.
+> AI-for-everyday Growth Copilot — Phase 0 scaffold.
+> Design docs: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) ·
+> [`../docs/FEATURES.md`](../docs/FEATURES.md) · [`../docs/RAG_PIPELINE.md`](../docs/RAG_PIPELINE.md) ·
+> phase tracking in [`../docs/phases/`](../docs/phases/).
 
-## Features
+## What works right now
 
-- 🔐 **Authentication**: JWT-based authentication with secure password hashing
-- 📋 **Task Management**: Full CRUD operations for Eisenhower Matrix tasks
-- 👤 **User Management**: User profiles, preferences, and statistics
-- 🛡️ **Security**: Rate limiting, CORS, Helmet security headers, input validation
-- 📊 **Analytics**: User statistics and activity tracking
-- 🔄 **Real-time**: Supabase real-time subscriptions for live updates
+| Endpoint | Auth | Behavior |
+|---|---|---|
+| `GET /healthz` | none | Uptime probe: `{ok, version, database, anthropic, auth_mode, llm_tokens_available}` |
+| `POST /api/capture` | Bearer | Free text → **Claude tool use** → discrete, Eisenhower-classified tasks. Persists to Postgres when `DATABASE_URL` is set (`source: nl_capture`), otherwise proposal-only |
+| *(future)* `POST /api/capture/retriage` | — | Phase 1: one-click correction trains the classifier |
 
-## Tech Stack
+## Quickstart
 
-- **Runtime**: Node.js
-- **Framework**: Express.js with TypeScript
-- **Database**: Supabase (PostgreSQL)
-- **Authentication**: JWT with bcryptjs
-- **Validation**: Joi
-- **Security**: Helmet, CORS, Rate Limiting
-- **Logging**: Morgan
+```bash
+cd backend
+cp .env.example .env            # then fill GROWTH_ANTHROPIC_API_KEY
+cargo run                       # → http://localhost:8000
 
-## Quick Start
+# every /api route accepts the literal token "dev" while
+# GROWTH_FIREBASE_PROJECT_ID is unset (dev mode, logged loudly)
 
-### Prerequisites
+curl -s localhost:8000/healthz
 
-- Node.js (v16 or higher)
-- npm or yarn
-- Supabase account and project
+curl -s -X POST localhost:8000/api/capture \
+  -H 'authorization: Bearer dev' \
+  -H 'content-type: application/json' \
+  -d '{"text": "review PRs tomorrow, plan my interview prep"}'
+```
 
-### Installation
+Gradual wiring — everything degrades gracefully, nothing 500s on missing config:
 
-1. **Clone and navigate to backend directory:**
-   ```bash
-   cd backend
-   ```
+| Setting | When absent | When present |
+|---|---|---|
+| `GROWTH_ANTHROPIC_API_KEY` | capture 503s ("not configured") | capture end-to-end via Claude |
+| `GROWTH_DATABASE_URL` | capture returns proposals only | tool results **insert into `tasks`** |
+| `GROWTH_FIREBASE_PROJECT_ID` | dev auth only ("dev" → `local_dev`) | real `Bearer <Firebase ID token>` verification (JWKS + RS256, cached 30 min) |
 
-2. **Install dependencies:**
-   ```bash
-   npm install
-   ```
+Schema migration (run once in the Supabase SQL editor):
+`backend/migrations/0001_phase0_schema.sql`
 
-3. **Environment Setup:**
-   ```bash
-   cp .env.example .env
-   ```
+## Rate limiting — how Claude is protected
 
-   Fill in your `.env` file with:
-   ```env
-   # Server Configuration
-   PORT=3001
-   NODE_ENV=development
-   FRONTEND_URL=http://localhost:5173
+**All** Anthropic traffic goes through a single choke point:
+`src/services/anthropic.rs::AnthropicClient::chat`. No route/job builds an LLM
+request itself, so the guarantees below hold platform-wide:
 
-   # Supabase Configuration
-   SUPABASE_URL=your_supabase_project_url
-   SUPABASE_ANON_KEY=your_supabase_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+| Control | Default | Behavior |
+|---|---|---|
+| Token bucket (`GROWTH_RATE_LIMIT_RPM`) | 20 req/min | Awaits (never errors) until a token frees |
+| Concurrency (…_CONCURRENCY) | 3 | Max in-flight LLM calls, `tokio::sync::Semaphore` |
+| 429/529 retry | `max_retries=4` | Honors `retry-after`; retries the identical payload |
+| 5xx / transport retry | exponential + jitter | 1s→2s→4s…, fails after exactly `max_retries` |
+| Other 4xx | fail-fast | The request is malformed — retrying cannot help |
+| Prompt guard | `…MAX_INPUT_CHARS=60000` | Rejected **locally**, zero network cost |
+| Output ceiling | `GROWTH_ANTHROPIC_MAX_TOKENS` | 4096 sent as `max_tokens` |
 
-   # JWT Configuration
-   JWT_SECRET=your_super_secret_jwt_key
-   JWT_EXPIRES_IN=7d
+Tool use (not prose parsing): Claude must call the `create_task` tool with a
+validated JSON schema; unparseable or unknown-enum responses become explicit
+`AppError::Upstream` — they never silently corrupt data.
 
-   # Rate Limiting
-   RATE_LIMIT_WINDOW_MS=900000
-   RATE_LIMIT_MAX_REQUESTS=100
-   ```
-
-4. **Database Setup:**
-   Run the SQL schema in your Supabase SQL editor:
-   ```sql
-   -- Copy contents from supabase-schema.sql in the root directory
-   ```
-
-5. **Start the server:**
-   ```bash
-   # Development mode with hot reload
-   npm run dev
-
-   # Production build
-   npm run build
-   npm start
-   ```
-
-The API will be available at `http://localhost:3001`
-
-## API Endpoints
-
-### Authentication
-- `POST /api/auth/register` - User registration
-- `POST /api/auth/login` - User login
-- `GET /api/auth/profile` - Get user profile
-- `POST /api/auth/logout` - Logout user
-
-### Tasks
-- `GET /api/tasks` - Get all user tasks
-- `POST /api/tasks` - Create new task
-- `PUT /api/tasks/:id` - Update task
-- `DELETE /api/tasks/:id` - Delete task
-- `PUT /api/tasks/:id/complete` - Toggle task completion
-- `POST /api/tasks/bulk-update` - Bulk update tasks
-
-### Users
-- `GET /api/users/stats` - Get user statistics
-- `GET /api/users/preferences` - Get user preferences
-- `PUT /api/users/preferences` - Update user preferences
-- `GET /api/users/activity` - Get recent user activity
-- `DELETE /api/users/account` - Delete user account
-
-## Project Structure
+## Project layout
 
 ```
 backend/
-├── src/
-│   ├── config/
-│   │   └── supabase.ts          # Supabase client configuration
-│   ├── middleware/
-│   │   ├── auth.ts              # JWT authentication middleware
-│   │   ├── errorHandler.ts      # Global error handling
-│   │   └── notFound.ts          # 404 handler
-│   ├── routes/
-│   │   ├── auth.ts              # Authentication routes
-│   │   ├── tasks.ts             # Task management routes
-│   │   └── users.ts             # User management routes
-│   └── server.ts                # Main server file
-├── .env.example                 # Environment variables template
-├── package.json                 # Dependencies and scripts
-└── tsconfig.json               # TypeScript configuration
+├── Cargo.toml                     # deps + profile.release (thin LTO)
+├── .env.example                   # every variable, documented
+├── migrations/0001_phase0_schema.sql
+├── tests/anthropic.rs             # 6 integration tests (wiremock, no network)
+└── src/
+    ├── lib.rs                     # AppState, build_state, build_app
+    ├── main.rs                    # thin async runner
+    ├── core/
+    │   ├── config.rs              # figment/env config + sentinel PORT fallback
+    │   ├── auth.rs                # Bearer → AuthUser extractor
+    │   └── error.rs               # AppError → typed HTTP responses
+    ├── routes/
+    │   ├── mod.rs                 # router assembly
+    │   ├── health.rs              # /healthz
+    │   └── capture.rs             # /api/capture + optional DB persistence
+    └── services/
+        ├── anthropic.rs           # ← single LLM path: bucket, slots, retries, tool parsing
+        └── capture.rs             # prompt, tool schema, structured-task assembly
 ```
 
-## Development
+## Testing
 
-### Available Scripts
-
-- `npm run dev` - Start development server with hot reload
-- `npm run build` - Build for production
-- `npm start` - Start production server
-- `npm run lint` - Run ESLint
-- `npm run type-check` - Run TypeScript type checking
-
-### Code Quality
-
-- **TypeScript**: Strict type checking enabled
-- **ESLint**: Code linting with Airbnb config
-- **Prettier**: Code formatting
-- **Husky**: Pre-commit hooks for quality checks
-
-## Security Features
-
-- **Password Hashing**: bcryptjs with salt rounds
-- **JWT Tokens**: Secure token-based authentication
-- **Rate Limiting**: Prevents abuse with configurable limits
-- **CORS**: Configured for frontend origin
-- **Helmet**: Security headers
-- **Input Validation**: Joi schema validation
-- **SQL Injection Protection**: Parameterized queries
-
-## Error Handling
-
-The API uses consistent error response format:
-```json
-{
-  "success": false,
-  "error": "Error message",
-  "details": "Additional error details (optional)"
-}
+```bash
+cargo test
 ```
 
-## Contributing
+6/6 pass (wiremock spins a local mock server — the suite never touches the network):
 
-1. Follow the existing code style
-2. Add tests for new features
-3. Update documentation
-4. Use conventional commits
+| Test | Proves |
+|---|---|
+| `bucket_starts_full_and_drains` | RPM bucket blocks when drained (4th call waits) |
+| `retries_on_429_with_retry_after_then_succeeds` | Rate-limit retry path + `retry-after` honored |
+| `exhausts_retries_on_persistent_5xx` | Exactly `max_retries` attempts, then surfaced error |
+| `tool_use_blocks_are_parsed` | Claude tool-use blocks → typed structs |
+| `oversized_prompts_are_rejected_locally` | Zero network calls for oversized prompts |
+| `request_body_never_omits_model_and_max_tokens` | Request shape contract |
 
-## License
+## Deviations from the docs (deliberate)
 
-MIT License - see LICENSE file for details
+1. **Firebase verification via `jsonwebtoken` + JWKS instead of the
+   `firebase-admin` crate.** Same guarantees (RS256, `kid` lookup, `iss`/`aud`
+   checks, TTL-cached JWKS) with no heavyweight admin SDK dependency. Documented
+   here so nobody expects a `firebase-admin` entry in `Cargo.toml`.
+2. **Runtime-checked SQL (`sqlx::query`) rather than `query_as!` macros.**
+   Compile-time validation needs `DATABASE_URL` (or `cargo sqlx prepare` offline
+   metadata) at build time; Phase 0 doesn't assume one. Switching the macros on
+   is a Phase 1 task once Supabase creds live on the build host.
+3. **`/api/capture` early-lands in Phase 0** (Phase docs planned it for Phase 1)
+   because it is the fastest way to verify the rate-limited Claude integration
+   end-to-end. Phase 1 completes it with persistence on by default + the SPA rewire.
+
+## Next steps (Phase 1 — see `../docs/phases/PHASE_1.md`)
+
+- `GET/POST/PATCH/DELETE /api/tasks` parity vs the old direct-Supabase calls
+- daily.dev connector + 24h cache table usage
+- morning brief: one composed Claude call → `GET /api/briefing` (+ accept-to-matrix)
+- switch `sqlx` to compile-time-checked macros with offline prepared metadata

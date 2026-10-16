@@ -63,10 +63,10 @@ git clone https://github.com/Lil-mast/TaskManagement.git
 cd TaskManagement
 
 # Install dependencies
-npm install
+pnpm install
 
 # Start the app
-npm run dev
+pnpm run dev
 ```
 
 Open `http://localhost:5173` and start organizing your tasks immediately! No configuration required.
@@ -105,7 +105,7 @@ Open `http://localhost:5173` and start organizing your tasks immediately! No con
 
 4. **Run the Application**
    ```bash
-   npm run dev
+   pnpm run dev
    ```
 
 ## Project Structure
@@ -162,10 +162,10 @@ The Eisenhower Matrix helps you prioritize tasks based on two criteria:
 
 ### Available Scripts
 ```bash
-npm run dev      # Start development server
-npm run build    # Build for production
-npm run preview  # Preview production build
-npm run test     # Run tests (when implemented)
+pnpm run dev      # Start development server
+pnpm run build    # Build for production
+pnpm run preview  # Preview production build
+pnpm run test     # Run tests (when implemented)
 ```
 
 ### Environment Variables

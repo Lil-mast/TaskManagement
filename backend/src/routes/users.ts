@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { supabase } from '../config/supabase';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
-const router = Router();
+const router: Router = Router();
 
 // Get user statistics
 router.get('/stats', authenticateToken, async (req: AuthRequest, res: Response) => {

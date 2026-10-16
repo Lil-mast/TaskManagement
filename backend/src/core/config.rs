@@ -1,0 +1,103 @@
+use std::env;
+
+use figment::{providers::Env, Figment};
+use serde::Deserialize;
+
+/// Everything the app needs, sourced from the environment (prefixed `GROWTH_`).
+///
+/// Optional fields (DB URL, Anthropic key, Firebase project) let the backend
+/// boot gracefully in partial setups — `/healthz` reflects what's wired.
+#[derive(Debug, Clone, Deserialize)]
+pub struct Config {
+    pub port: u16,
+    pub cors_origins: Vec<String>,
+    #[serde(default)]
+    pub database_url: Option<String>,
+    #[serde(default)]
+    pub anthropic_api_key: Option<String>,
+    #[serde(default)]
+    pub anthropic_model: Option<String>,
+    #[serde(default = "default_max_tokens")]
+    pub anthropic_max_tokens: u32,
+    #[serde(default = "default_max_input_chars")]
+    pub anthropic_max_input_chars: usize,
+    #[serde(default = "default_rpm")]
+    pub rate_limit_rpm: u32,
+    #[serde(default = "default_concurrency")]
+    pub rate_limit_concurrency: usize,
+    #[serde(default = "default_retries")]
+    pub max_retries: u32,
+    #[serde(default)]
+    pub firebase_project_id: Option<String>,
+}
+
+fn default_max_tokens() -> u32 {
+    4096
+}
+fn default_max_input_chars() -> usize {
+    60_000
+}
+fn default_rpm() -> u32 {
+    20
+}
+fn default_concurrency() -> usize {
+    3
+}
+fn default_retries() -> u32 {
+    4
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            port: 8000,
+            cors_origins: vec!["http://localhost:5173".into()],
+            database_url: None,
+            anthropic_api_key: None,
+            anthropic_model: Some("claude-sonnet-4-20250514".into()),
+            anthropic_max_tokens: 4096,
+            anthropic_max_input_chars: 60_000,
+            rate_limit_rpm: 20,
+            rate_limit_concurrency: 3,
+            max_retries: 4,
+            firebase_project_id: None,
+        }
+    }
+}
+
+impl Config {
+    pub fn load_from_env() -> Result<Self, anyhow::Error> {
+        // dotenvy: local runs read backend/.env (see .env.example); on hosts the
+        // real env vars are already set, so a missing file is not an error.
+        let _ = dotenvy::dotenv();
+        let figment = Figment::new()
+            .merge(Env::prefixed("GROWTH_").split("__"))
+            .select("*");
+        let cfg: Config = match figment.extract() {
+            Ok(c) => c,
+            Err(_) => Config::default(),
+        };
+        // tolerate plain PORT set by hosts (flyio/railway pattern)
+        if let Ok(port) = env::var("PORT") {
+            return Ok(Config {
+                port: port.parse().unwrap_or(cfg.port),
+                ..cfg
+            });
+        }
+        Ok(cfg)
+    }
+
+    pub fn anthropic_configured(&self) -> bool {
+        self.anthropic_api_key
+            .as_deref()
+            .map(|k| !k.is_empty())
+            .unwrap_or(false)
+    }
+
+    pub fn firebase_configured(&self) -> bool {
+        self.firebase_project_id
+            .as_deref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false)
+    }
+}

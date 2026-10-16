@@ -13,7 +13,7 @@
   - Removed @tailwindcss/vite plugin from vite.config.ts
 
 ### 2. Build/Dev Server Issues
-- **Symptom**: `npm run build` exits with code 130 (interrupted)
+- **Symptom**: `pnpm run build` exits with code 130 (interrupted)
 - **Symptom**: Dev server may not be serving files correctly
 - **Impact**: Cannot properly test or deploy the app
 
@@ -50,11 +50,11 @@
 1. **Run clean install**:
    ```bash
    rm -rf node_modules package-lock.json
-   npm install
+   pnpm install
    ```
 2. **Test build**:
    ```bash
-   npm run build
+   pnpm run build
    ```
 3. **Fix any TypeScript errors**
 
@@ -110,7 +110,7 @@
 
 ### For Build Issues:
 1. Check TypeScript errors: `npx tsc --noEmit`
-2. Check for missing dependencies: `npm ls`
+2. Check for missing dependencies: `pnpm ls`
 3. Verify Vite config: check `vite.config.ts`
 4. Try different Node.js version if issues persist
 
@@ -156,13 +156,13 @@ src/
 ```bash
 # Clean install
 rm -rf node_modules package-lock.json
-npm install
+pnpm install
 
 # Start dev server
-npm run dev
+pnpm run dev
 
 # Build for production
-npm run build
+pnpm run build
 
 # Type check
 npx tsc --noEmit

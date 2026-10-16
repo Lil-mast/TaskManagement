@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { supabase } from '../config/supabase';
 import { authenticateToken, AuthRequest } from '../middleware/auth';
 
-const router = Router();
+const router: Router = Router();
 
 // Validation helpers
 const validateEmail = (email: string): boolean => {
