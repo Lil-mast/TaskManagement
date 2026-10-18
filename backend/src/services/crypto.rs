@@ -84,7 +84,7 @@ impl TokenCrypto {
     }
 
     // -----------------------------------------------------------------------
-    // OAuth state (signed, expiring, carries the user id)
+    // OAuth state (signed, expiring, provider + user identity)
     // -----------------------------------------------------------------------
 
     fn state_mac(&self) -> Hmac<Sha256> {
@@ -92,30 +92,31 @@ impl TokenCrypto {
         hmac::Mac::new_from_slice(&key).expect("HMAC accepts 32-byte key")
     }
 
-    pub fn sign_state(&self, user_id: &str) -> String {
+    pub fn sign_state(&self, provider: &str, user_id: &str) -> String {
         let exp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs() + STATE_TTL_SECS)
             .unwrap_or(STATE_TTL_SECS);
-        let payload = format!("{user_id}|{exp}");
+        let payload = format!("{provider}|{user_id}|{exp}");
         let mut mac = self.state_mac();
         mac.update(payload.as_bytes());
         let tag = hex::encode(mac.finalize().into_bytes());
         format!("{payload}|{tag}")
     }
 
-    /// Verifies MAC + expiry; returns the user id when the state is legit.
-    pub fn verify_state(&self, state: &str) -> Option<String> {
+    /// Verifies MAC + expiry; returns `(provider, user_id)` when legit.
+    pub fn verify_state(&self, state: &str) -> Option<(String, String)> {
         let mut parts = state.rsplitn(3, '|');
         let tag = parts.next()?;
         let exp: u64 = parts.next()?.parse().ok()?;
-        let user_id = parts.next()?.to_string();
-        if user_id.starts_with('|') {
+        let signed_payload = parts.next()?; // "provider|user_id"
+        let (provider, user_id) = signed_payload.split_once('|')?;
+        if provider.contains('|') || provider.is_empty() || user_id.is_empty() {
             return None;
         }
 
         let mut mac = self.state_mac();
-        mac.update(format!("{user_id}|{exp}").as_bytes());
+        mac.update(format!("{provider}|{user_id}|{exp}").as_bytes());
         if hex::encode(mac.finalize().into_bytes()) != tag {
             return None;
         }
@@ -123,7 +124,7 @@ impl TokenCrypto {
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_secs())
             .unwrap_or(0);
-        (exp >= now).then_some(user_id)
+        (exp >= now).then(|| (provider.to_string(), user_id.to_string()))
     }
 }
 
@@ -170,16 +171,26 @@ mod tests {
     #[test]
     fn state_signs_and_verifies() {
         let c = crypto();
-        let state = c.sign_state("local_dev");
-        assert_eq!(c.verify_state(&state).as_deref(), Some("local_dev"));
+        let state = c.sign_state("google", "local_dev");
+        let (provider, user) = c.verify_state(&state).unwrap();
+        assert_eq!(provider, "google");
+        assert_eq!(user, "local_dev");
     }
 
     #[test]
     fn state_rejects_tampering_and_garbage() {
         let c = crypto();
-        assert!(c.verify_state("local_dev|9999999999|deadbeef").is_none());
+        assert!(c.verify_state("google|local_dev|9999999999|deadbeef").is_none());
         assert!(c.verify_state("garbage").is_none());
         assert!(c.verify_state("").is_none());
+    }
+
+    #[test]
+    fn state_carries_provider() {
+        let c = crypto();
+        let s = c.sign_state("gmail", "u1");
+        let (provider, user) = c.verify_state(&s).unwrap();
+        assert_eq!((provider.as_str(), user.as_str()), ("gmail", "u1"));
     }
 
     #[test]

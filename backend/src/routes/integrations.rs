@@ -26,6 +26,8 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/google/url", get(consent_url))
         .route("/google/callback", get(callback))
         .route("/google", delete(disconnect))
+        .route("/gmail/url", get(gmail_consent_url))
+        .route("/gmail", delete(gmail_disconnect))
 }
 
 /// `GET /api/integrations` — probe stored integration state (no network).
@@ -39,21 +41,19 @@ async fn status(
         ));
     };
 
-    #[derive(Debug, Serialize)]
-    struct GoogleStatus {
-        connected: bool,
-        connected_at: Option<String>,
-        scopes: Vec<String>,
-        calendar_events_cached: i64,
-        client_configured: bool,
+    #[derive(Debug, Serialize, sqlx::FromRow)]
+    struct ProviderRow {
+        provider: String,
+        scopes: String,
+        connected_at: chrono::DateTime<chrono::Utc>,
     }
 
-    let row: Option<(String, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
-        "SELECT scopes::text, connected_at FROM integrations
-         WHERE user_id = $1 AND provider = 'google'",
+    let rows: Vec<ProviderRow> = sqlx::query_as(
+        "SELECT provider, scopes::text, connected_at FROM integrations
+         WHERE user_id = $1 ORDER BY provider",
     )
     .bind(&auth.0)
-    .fetch_optional(pool)
+    .fetch_all(pool)
     .await
     .map_err(|e| AppError::Database(format!("integration probe: {e}")))?;
 
@@ -65,27 +65,29 @@ async fn status(
     .await
     .map_err(|e| AppError::Database(format!("calendar count: {e}")))?;
 
-    let (connected, connected_at, scopes) = match &row {
-        Some((scopes_text, at)) => (
-            true,
-            Some(at.to_rfc3339()),
-            scopes_text
-                .trim_matches(|c| c == '{' || c == '}')
-                .split(',')
-                .map(|x| x.trim().to_string())
-                .filter(|x| !x.is_empty())
-                .collect::<Vec<_>>(),
-        ),
-        None => (false, None, Vec::new()),
-    };
+    let mut providers = serde_json::Map::new();
+    for row in rows {
+        providers.insert(
+            row.provider.clone(),
+            json!({
+                "connected": true,
+                "connected_at": row.connected_at.to_rfc3339(),
+                "scopes": row.scopes
+                    .trim_matches(|c| c == '{' || c == '}')
+                    .split(',')
+                    .map(|x| x.trim().to_string())
+                    .filter(|x| !x.is_empty())
+                    .collect::<Vec<_>>(),
+            }),
+        );
+    }
 
     Ok(Json(json!({
-        "google": GoogleStatus {
-            connected,
-            connected_at,
-            scopes,
-            calendar_events_cached: cached,
-            client_configured: state.calendar.as_ref().map(|c| c.is_configured()).unwrap_or(false),
+        "providers": providers,
+        "calendar_events_cached": cached,
+        "clients_configured": {
+            "google": state.calendar.as_ref().map(|c| c.is_configured()).unwrap_or(false),
+            "gmail": state.email.as_ref().map(|e| e.is_configured()).unwrap_or(false),
         }
     })))
 }
@@ -112,16 +114,11 @@ struct CallbackQuery {
 }
 
 /// `GET /api/integrations/google/callback` — browser redirect landing.
+/// Identity and provider come from the signed state; dispatch per provider.
 async fn callback(
     State(state): State<Arc<AppState>>,
     Query(q): Query<CallbackQuery>,
 ) -> AppResult<axum::response::Html<String>> {
-    let svc = state.calendar.as_ref().ok_or_else(|| {
-        AppError::Unavailable(
-            "google integration not configured (set GROWTH_GOOGLE_CLIENT_ID/SECRET + GROWTH_TOKEN_ENC_KEY)"
-                .into(),
-        )
-    })?;
     let pool = state.db.as_ref().ok_or_else(|| {
         AppError::Unavailable("integrations require a database (set GROWTH_DATABASE_URL)".into())
     })?;
@@ -130,18 +127,48 @@ async fn callback(
         tracing::warn!(error = err, "user denied google consent");
     }
     let code = q.code.as_deref().ok_or_else(|| AppError::BadRequest("missing code".into()))?;
-    let state_param = q
-        .state
-        .as_deref()
-        .and_then(|s| svc.verify_state(s))
-        .ok_or_else(|| AppError::Unauthorized("state invalid or expired — retry connect".into()))?;
 
-    svc.exchange_code(code, &state_param, pool).await?;
-    tracing::info!(user = ?state_param, "google integration connected");
+    // any configured service can verify the state — same signing key
+    let verified = state
+        .calendar
+        .as_ref()
+        .map(|c| c.verify_state(q.state.as_deref().unwrap_or("")))
+        .or_else(|| {
+            state
+                .email
+                .as_ref()
+                .map(|e| e.verify_state(q.state.as_deref().unwrap_or("")))
+        })
+        .flatten()
+        .ok_or_else(|| {
+            AppError::Unauthorized("state invalid or expired — retry connect".into())
+        })?;
+    let (provider, user_id) = verified;
+
+    match provider.as_str() {
+        "google" => {
+            let svc = state.calendar.as_ref().ok_or_else(|| {
+                AppError::Unavailable("calendar integration not configured".into())
+            })?;
+            svc.exchange_code(code, &user_id, pool).await?;
+        }
+        "gmail" => {
+            let svc = state.email.as_ref().ok_or_else(|| {
+                AppError::Unavailable("gmail integration not configured".into())
+            })?;
+            svc.exchange_code(code, &user_id, pool).await?;
+        }
+        other => {
+            return Err(AppError::BadRequest(format!(
+                "state names unknown provider {other:?}"
+            )))
+        }
+    }
+    tracing::info!(provider = %provider, user = ?user_id, "google integration connected");
 
     Ok(axum::response::Html(
         "<html><body style='font-family:sans-serif;padding:2rem'>\
-<h2>✅ Google Calendar connected</h2>\
+<h2>✅ Integration connected</h2>\
 <p>You can close this tab.</p></body></html>".into(),
     ))
 }
@@ -153,6 +180,36 @@ async fn disconnect(
 ) -> AppResult<Json<serde_json::Value>> {
     let svc = state.calendar.as_ref().ok_or_else(|| {
         AppError::Unavailable("google integration not configured".into())
+    })?;
+    let pool = state.db.as_ref().ok_or_else(|| {
+        AppError::Unavailable("integrations require a database (set GROWTH_DATABASE_URL)".into())
+    })?;
+    let deleted = svc.disconnect(pool, &auth.0).await?;
+    Ok(Json(json!({ "disconnected": deleted })))
+}
+
+/// `GET /api/integrations/gmail/url` — gmail consent URL for this user.
+async fn gmail_consent_url(
+    State(state): State<Arc<AppState>>,
+    auth: AuthUser,
+) -> AppResult<Json<serde_json::Value>> {
+    let svc = state.email.as_ref().ok_or_else(|| {
+        AppError::Unavailable(
+            "gmail not configured (set GROWTH_GOOGLE_CLIENT_ID/SECRET + GROWTH_TOKEN_ENC_KEY)"
+                .into(),
+        )
+    })?;
+    Ok(Json(json!({ "url": svc.consent_url(&auth.0) })))
+}
+
+/// `DELETE /api/integrations/gmail` — revoke + drop the token row
+/// (triage decisions stay — they are the user's, not Google data).
+async fn gmail_disconnect(
+    State(state): State<Arc<AppState>>,
+    auth: AuthUser,
+) -> AppResult<Json<serde_json::Value>> {
+    let svc = state.email.as_ref().ok_or_else(|| {
+        AppError::Unavailable("gmail integration not configured".into())
     })?;
     let pool = state.db.as_ref().ok_or_else(|| {
         AppError::Unavailable("integrations require a database (set GROWTH_DATABASE_URL)".into())

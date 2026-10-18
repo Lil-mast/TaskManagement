@@ -13,6 +13,7 @@ use services::briefing::BriefingService;
 use services::capture::CaptureService;
 use services::calendar::CalendarService;
 use services::dailydev::DailyDevClient;
+use services::email::EmailService;
 use services::embeddings::{
     EmbeddingClient, EmbeddingSettings, DEFAULT_EMBEDDINGS_BASE_URL,
     DEFAULT_EMBEDDINGS_MODEL,
@@ -35,6 +36,8 @@ pub struct AppState {
     pub rag: Option<RagService>,
     /// Google Calendar (needs client id/secret + token encryption key)
     pub calendar: Option<CalendarService>,
+    /// Gmail read-only triage (same OAuth client, gmail scope)
+    pub email: Option<EmailService>,
     /// token-at-rest crypto object shared by integration features
     pub token_crypto: Option<services::crypto::TokenCrypto>,
 }
@@ -42,12 +45,13 @@ pub struct AppState {
 impl AppState {
     pub fn health_snapshot(&self) -> String {
         format!(
-            "db={} anthropic={} dailydev={} rag={} google={} auth={}",
+            "db={} anthropic={} dailydev={} rag={} google={} gmail={} auth={}",
             self.db.is_some(),
             self.anthropic.is_some(),
             self.dailydev.as_ref().map(|d| d.is_configured()).unwrap_or(false),
             self.rag.as_ref().map(|r| r.is_ready()).unwrap_or(false),
             self.calendar.as_ref().map(|c| c.is_configured()).unwrap_or(false),
+            self.email.as_ref().map(|e| e.is_configured()).unwrap_or(false),
             if self.config.firebase_configured() { "firebase" } else { "dev" }
         )
     }
@@ -162,20 +166,25 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
         },
         None => None,
     };
+    // Google Calendar (needs OAuth client + token encryption key)
+    let google_settings = |scope: &'static str| services::google::GoogleSettings {
+        client_id: config.google_client_id.clone().unwrap_or_default(),
+        client_secret: config.google_client_secret.clone().unwrap_or_default(),
+        redirect_url: config
+            .google_redirect_url
+            .clone()
+            .unwrap_or_else(|| "http://localhost:8000/api/integrations/google/callback".into()),
+        scope: scope.into(),
+        calendar_base_url: services::google::DEFAULT_CALENDAR_BASE_URL.into(),
+        gmail_base_url: services::google::DEFAULT_GMAIL_BASE_URL.into(),
+    };
+
     let calendar = match token_crypto
         .as_ref()
         .filter(|_| config.google_configured())
     {
         Some(crypto) => {
-            let settings = services::google::GoogleSettings {
-                client_id: config.google_client_id.clone().unwrap_or_default(),
-                client_secret: config.google_client_secret.clone().unwrap_or_default(),
-                redirect_url: config
-                    .google_redirect_url
-                    .clone()
-                    .unwrap_or_else(|| "http://localhost:8000/api/integrations/google/callback".into()),
-                scope: services::google::CALENDAR_SCOPE.into(),
-            };
+            let settings = google_settings(services::google::CALENDAR_SCOPE);
             tracing::info!(
                 redirect = %settings.redirect_url,
                 "google calendar integration enabled"
@@ -191,6 +200,24 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
         }
     };
 
+    // Gmail read-only triage — same OAuth client, gmail scope; triage itself
+    // additionally needs Anthropic (checked per request, like capture).
+    let email = match token_crypto
+        .as_ref()
+        .filter(|_| config.google_configured())
+    {
+        Some(crypto) => {
+            tracing::info!("gmail triage integration enabled (gmail.readonly)");
+            Some(EmailService::new(
+                services::google::GoogleClient::new(google_settings(
+                    services::google::GMAIL_SCOPE,
+                )),
+                crypto.clone(),
+            ))
+        }
+        None => None,
+    };
+
     Ok(Arc::new(AppState {
         config: config.clone(),
         db,
@@ -200,6 +227,7 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
         briefing,
         rag,
         calendar,
+        email,
         token_crypto,
     }))
 }

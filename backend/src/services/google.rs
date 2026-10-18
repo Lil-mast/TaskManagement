@@ -12,13 +12,12 @@ use super::crypto::TokenCrypto;
 use crate::core::error::{AppError, AppResult};
 
 pub const CALENDAR_SCOPE: &str = "https://www.googleapis.com/auth/calendar.readonly";
+pub const GMAIL_SCOPE: &str = "https://www.googleapis.com/auth/gmail.readonly";
 pub const AUTH_BASE: &str = "https://accounts.google.com/o/oauth2/v2/auth";
 pub const TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
-pub const CALENDAR_LIST_URL: &str = "https://www.googleapis.com/calendar/v3/primary/events";
 
-/// How far ahead of `expires_at` a token counts as stale (clock skew + a
-/// half-open request budget).
-pub const TOKEN_REFRESH_MARGIN_SECS: i64 = 60;
+pub const DEFAULT_CALENDAR_BASE_URL: &str = "https://www.googleapis.com/calendar/v3";
+pub const DEFAULT_GMAIL_BASE_URL: &str = "https://gmail.googleapis.com/gmail/v1";
 
 #[derive(Debug, Clone)]
 pub struct GoogleSettings {
@@ -28,7 +27,14 @@ pub struct GoogleSettings {
     /// Phase 3: calendar read-only. Phase 4 (Gmail) consents separately into
     /// its own `integrations` provider row.
     pub scope: String,
+    /// API roots (overridable so wiremock tests can pin a fake server)
+    pub calendar_base_url: String,
+    pub gmail_base_url: String,
 }
+
+/// How far ahead of `expires_at` a token counts as stale (clock skew + a
+/// half-open request budget).
+pub const TOKEN_REFRESH_MARGIN_SECS: i64 = 60;
 
 #[derive(Clone)]
 pub struct GoogleClient {
@@ -45,13 +51,18 @@ impl GoogleClient {
         Self { http, settings: std::sync::Arc::new(settings) }
     }
 
+    /// Gmail API root (overridable in tests).
+    pub fn gmail_base(&self) -> &str {
+        &self.settings.gmail_base_url
+    }
+
     pub fn is_configured(&self) -> bool {
         !self.settings.client_id.is_empty()
     }
 
-    /// Consent URL with the signed state bound to this user (offline access).
-    pub fn consent_url(&self, crypto: &TokenCrypto, user_id: &str) -> String {
-        let state = crypto.sign_state(user_id);
+    /// Consent URL with the signed state bound to (provider, user).
+    pub fn consent_url(&self, crypto: &TokenCrypto, provider: &str, user_id: &str) -> String {
+        let state = crypto.sign_state(provider, user_id);
         let mut url = url::Url::parse(AUTH_BASE).expect("static auth base is valid");
         url.query_pairs_mut()
             .append_pair("client_id", &self.settings.client_id)
@@ -65,11 +76,13 @@ impl GoogleClient {
     }
 
     /// Exchange an authorization code (from the callback) and store the token
-    /// tuple encrypted at rest.
+    /// tuple encrypted at rest under the consenting provider.
     pub async fn exchange_code(
         &self,
         code: &str,
         crypto: &TokenCrypto,
+        provider: &str,
+        scopes: Vec<String>,
         state_user_id: &str,
         pool: &PgPool,
     ) -> AppResult<()> {
@@ -83,7 +96,7 @@ impl GoogleClient {
             ])
             .await?;
 
-        store_token(pool, crypto, state_user_id, &token).await
+        store_token(pool, crypto, state_user_id, provider, Some(scopes), &token).await
     }
 
     /// Central refresh path — decrypt, refresh when stale, re-encrypt, update.
@@ -93,18 +106,20 @@ impl GoogleClient {
         pool: &PgPool,
         crypto: &TokenCrypto,
         user_id: &str,
+        provider: &str,
     ) -> AppResult<String> {
         let row: Option<(Vec<u8>, DateTime<Utc>)> = sqlx::query_as(
             "SELECT access_token_enc, expires_at FROM integrations
-             WHERE user_id = $1 AND provider = 'google'",
+             WHERE user_id = $1 AND provider = $2",
         )
         .bind(user_id)
+        .bind(provider)
         .fetch_optional(pool)
         .await
         .map_err(|e| AppError::Database(format!("integration read: {e}")))?;
 
         let (enc_access, expires_at) = row.ok_or_else(|| {
-            AppError::Unavailable("google not connected for this user".into())
+            AppError::Unavailable(format!("{provider} not connected for this user"))
         })?;
 
         let now = now_secs();
@@ -115,9 +130,10 @@ impl GoogleClient {
         // ---- stale → refresh ----
         let enc_refresh: Vec<u8> = sqlx::query_scalar(
             "SELECT refresh_token_enc FROM integrations
-             WHERE user_id = $1 AND provider = 'google'",
+             WHERE user_id = $1 AND provider = $2",
         )
         .bind(user_id)
+        .bind(provider)
         .fetch_one(pool)
         .await
         .map_err(|e| AppError::Database(format!("refresh token read: {e}")))?;
@@ -133,14 +149,15 @@ impl GoogleClient {
             .await?;
 
         // Google may re-issue a refresh token; keep the old one when absent.
-        store_token(pool, crypto, user_id, &fresh).await?;
+        store_token(pool, crypto, user_id, provider, None, &fresh).await?;
         crypto.decrypt_for_user(
             user_id,
             &sqlx::query_scalar::<_, Vec<u8>>(
                 "SELECT access_token_enc FROM integrations
-                 WHERE user_id = $1 AND provider = 'google'",
+                 WHERE user_id = $1 AND provider = $2",
             )
             .bind(user_id)
+            .bind(provider)
             .fetch_one(pool)
             .await
             .map_err(|e| AppError::Database(format!("fresh token read: {e}")))?,
@@ -156,7 +173,7 @@ impl GoogleClient {
         to: DateTime<Utc>,
     ) -> AppResult<Vec<GoogleEvent>> {
         let url = url::Url::parse_with_params(
-            CALENDAR_LIST_URL,
+            &format!("{}/primary/events", self.settings.calendar_base_url),
             &[
                 ("timeMin", from.to_rfc3339()),
                 ("timeMax", to.to_rfc3339()),
@@ -266,11 +283,14 @@ struct EventTime {
     }
 }
 
-/// Persist (upsert) the encrypted token tuple for one user.
+/// Persist (upsert) the encrypted token tuple for one user+provider.
+/// `keep_existing_scopes` merges rather than clobbers scopes on refresh.
 async fn store_token(
     pool: &PgPool,
     crypto: &TokenCrypto,
     user_id: &str,
+    provider: &str,
+    scopes: Option<Vec<String>>,
     token: &TokenResponse,
 ) -> AppResult<()> {
     let enc_access = crypto.encrypt_for_user(user_id, &token.access_token)?;
@@ -280,37 +300,40 @@ async fn store_token(
             // keep the existing refresh token when Google omits it
             sqlx::query_scalar::<_, Option<Vec<u8>>>(
                 "SELECT refresh_token_enc FROM integrations
-                 WHERE user_id = $1 AND provider = 'google'",
+                 WHERE user_id = $1 AND provider = $2",
             )
             .bind(user_id)
+            .bind(provider)
             .fetch_optional(pool)
             .await
             .map_err(|e| AppError::Database(format!("refresh read: {e}")))?
             .flatten()
             .ok_or_else(|| {
-                AppError::Upstream("google issued no refresh token on initial consent".into())
+                AppError::Upstream(format!(
+                    "google issued no refresh token when connecting {provider}"
+                ))
             })?
         }
     };
     let expires_at = Utc::now() + chrono::Duration::seconds(token.expires_in);
-    let scopes = vec![CALENDAR_SCOPE.to_string()];
 
     sqlx::query(
         "INSERT INTO integrations (user_id, provider, access_token_enc, refresh_token_enc,
                                    expires_at, scopes)
-         VALUES ($1, 'google', $2, $3, $4, $5)
+         VALUES ($1, $2, $3, $4, $5, $6)
          ON CONFLICT (user_id, provider) DO UPDATE
          SET access_token_enc = EXCLUDED.access_token_enc,
              refresh_token_enc = EXCLUDED.refresh_token_enc,
              expires_at = EXCLUDED.expires_at,
-             scopes = EXCLUDED.scopes,
+             scopes = COALESCE(EXCLUDED.scopes, integrations.scopes),
              connected_at = NOW()",
     )
     .bind(user_id)
+    .bind(provider)
     .bind(&enc_access)
     .bind(&enc_refresh)
     .bind(&expires_at)
-    .bind(&scopes)
+    .bind(scopes)
     .execute(pool)
     .await
     .map_err(|e| AppError::Database(format!("token persist: {e}")))?;

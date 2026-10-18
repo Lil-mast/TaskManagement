@@ -86,7 +86,9 @@ Rules:
    your advice. Only what you used — do not pad the list, and never invent
    sources.
 6. Never invent tasks, posts, patterns, or events — the grounding is
-   authoritative.
+   authoritative. INBOX_PULSE numbers are fact: if reply/task counts are
+   non-zero the headline may call them out, using the same numbers exactly,
+   but never as a `priorities` entry (only tasks may appear there).
 7. headline: one sharp sentence (max 90 chars) characterizing the day.
 8. Answer with exactly ONE `compose_brief` tool call."#;
 
@@ -142,8 +144,37 @@ struct CalendarGround {
     end_at: chrono::DateTime<Utc>,
 }
 
-async fn ground_calendar(pool: &PgPool, user_id: &str) -> AppResult<Vec<CalendarGround>> {
-    let rows: Vec<CalendarGround> = sqlx::query_as(
+/// Inbox pulse from `email_triage` — counts + heads-up subjects for reply/task
+/// only (the human decides; the brief must never misstate the numbers).
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct InboxPulse {
+    category: String,
+    open_count: i64,
+    top_subjects: Option<String>,
+}
+
+async fn ground_inbox_pulse(pool: &PgPool, user_id: &str) -> AppResult<Vec<InboxPulse>> {
+    let rows: Vec<InboxPulse> = sqlx::query_as(
+        "SELECT category, COUNT(*)::bigint AS open_count,
+                (SELECT string_agg(COALESCE(subject, summary, ''), ' | ')
+                 FROM (SELECT subject, summary
+                       FROM email_triage t2
+                       WHERE t2.user_id = $1 AND t2.category = t1.category
+                             AND t2.state = 'open'
+                       ORDER BY t2.triaged_at DESC LIMIT 3) top3) AS top_subjects
+         FROM email_triage t1
+         WHERE user_id = $1 AND state = 'open'
+         GROUP BY category
+         ORDER BY category",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| AppError::Database(format!("inbox pulse: {e}")))?;
+    Ok(rows)
+}
+
+async fn ground_calendar(pool: &PgPool, user_id: &str) -> AppResult<Vec<CalendarGround>> {    let rows: Vec<CalendarGround> = sqlx::query_as(
         "SELECT COALESCE(NULLIF(title, ''), '(busy)') AS title, start_at, end_at
          FROM calendar_events
          WHERE user_id = $1 AND busy AND start_at >= NOW()
@@ -307,7 +338,7 @@ impl BriefingService {
         };
 
         let ground_plus_watch = format!(
-            "TASKS: {}\n\nFEED: {}\n\nLEETCODE_DUE: {}\n\nCALENDAR (next 7 days, meeting load the priorities must account for): {}",
+            "TASKS: {}\n\nFEED: {}\n\nLEETCODE_DUE: {}\n\nCALENDAR (next 7 days, meeting load the priorities must account for): {}\n\nINBOX_PULSE (email_triage state — reply count must match this): {}",
             ground_tasks(&tasks),
             serde_json::to_string(&serde_json::json!({
                 "foryou": feeds.for_you.iter().take(8).collect::<Vec<_>>(),
@@ -318,6 +349,8 @@ impl BriefingService {
             serde_json::to_string(&ground_leetcode_due(pool, user_id, date).await.unwrap_or_default())
                 .unwrap_or_default(),
             serde_json::to_string(&ground_calendar(pool, user_id).await.unwrap_or_default())
+                .unwrap_or_default(),
+            serde_json::to_string(&ground_inbox_pulse(pool, user_id).await.unwrap_or_default())
                 .unwrap_or_default()
         );
 

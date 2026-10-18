@@ -4,6 +4,7 @@ pub mod calendar;
 pub mod capture;
 pub mod crypto;
 pub mod dailydev;
+pub mod email;
 pub mod embeddings;
 pub mod google;
 pub mod leetcode;

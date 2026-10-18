@@ -26,11 +26,11 @@ impl CalendarService {
     }
 
     pub fn consent_url(&self, user_id: &str) -> String {
-        self.google.consent_url(&self.crypto, user_id)
+        self.google.consent_url(&self.crypto, "google", user_id)
     }
 
-    /// Validate the signed OAuth state; returns the originating user id.
-    pub fn verify_state(&self, state: &str) -> Option<String> {
+    /// Validate the signed OAuth state; returns `(provider, user_id)`.
+    pub fn verify_state(&self, state: &str) -> Option<(String, String)> {
         self.crypto.verify_state(state)
     }
 
@@ -41,7 +41,14 @@ impl CalendarService {
         pool: &PgPool,
     ) -> AppResult<()> {
         self.google
-            .exchange_code(code, &self.crypto, state_user_id, pool)
+            .exchange_code(
+                code,
+                &self.crypto,
+                "google",
+                vec![super::google::CALENDAR_SCOPE.into()],
+                state_user_id,
+                pool,
+            )
             .await
     }
 
@@ -50,7 +57,7 @@ impl CalendarService {
     pub async fn sync(&self, pool: &PgPool, user_id: &str) -> AppResult<usize> {
         let token = self
             .google
-            .get_valid_token(pool, &self.crypto, user_id)
+            .get_valid_token(pool, &self.crypto, user_id, "google")
             .await?;
         let now = Utc::now();
         let events = self
