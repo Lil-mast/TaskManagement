@@ -1,6 +1,8 @@
 pub mod briefing;
 pub mod capture;
 pub mod health;
+pub mod knowledge;
+pub mod leetcode;
 pub mod tasks;
 
 /// All application routes, nested by feature.
@@ -13,5 +15,7 @@ pub fn router() -> axum::Router<std::sync::Arc<crate::AppState>> {
         .nest("/api/capture", capture::routes())
         .nest("/api/tasks", tasks::routes())
         .nest("/api/briefing", briefing::routes())
+        .nest("/api/leetcode", leetcode::routes())
+        .nest("/api/knowledge", knowledge::routes())
         .merge(crate::jobs::morning_brief::routes())
 }

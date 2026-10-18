@@ -128,7 +128,8 @@ impl CaptureService {
     }
 
     /// Run one capture; returns discrete structured tasks for the matrix.
-    pub async fn capture(&self, text: &str) -> AppResult<Vec<ProposedTask>> {
+    /// `principles` — retrieved book lines (R2); empty when RAG is not wired.
+    pub async fn capture(&self, text: &str, principles: &[String]) -> AppResult<Vec<ProposedTask>> {
         let text = text.trim();
         if text.is_empty() {
             return Err(AppError::BadRequest("capture text is empty".into()));
@@ -140,7 +141,18 @@ impl CaptureService {
         }
 
         let today = chrono::Utc::now().date_naive().to_string();
-        let system = format!("{CAPTURE_SYSTEM}\n\nCurrent date: {today}");
+        let mut system = format!("{CAPTURE_SYSTEM}\n\nCurrent date: {today}");
+        if !principles.is_empty() {
+            system.push_str("\n\n## Principles to consider (from the user's book library)\n");
+            system.push_str(
+                "Weave them in where genuinely relevant — do not force-fit or invent mentions:\n",
+            );
+            for p in principles {
+                system.push_str("- ");
+                system.push_str(p);
+                system.push('\n');
+            }
+        }
         let message = Message {
             role: Role::User,
             content: text.to_string(),

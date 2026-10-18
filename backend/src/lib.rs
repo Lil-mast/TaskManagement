@@ -12,6 +12,11 @@ use services::anthropic::{AnthropicClient, AnthropicSettings, DEFAULT_BASE_URL};
 use services::briefing::BriefingService;
 use services::capture::CaptureService;
 use services::dailydev::DailyDevClient;
+use services::embeddings::{
+    EmbeddingClient, EmbeddingSettings, DEFAULT_EMBEDDINGS_BASE_URL,
+    DEFAULT_EMBEDDINGS_MODEL,
+};
+use services::rag::RagService;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -25,15 +30,18 @@ pub struct AppState {
     pub capture: Option<CaptureService>,
     pub dailydev: Option<DailyDevClient>,
     pub briefing: Option<BriefingService>,
+    /// RAG retrieval — needs the embeddings key; DB joins per-request
+    pub rag: Option<RagService>,
 }
 
 impl AppState {
     pub fn health_snapshot(&self) -> String {
         format!(
-            "db={} anthropic={} dailydev={} auth={}",
+            "db={} anthropic={} dailydev={} rag={} auth={}",
             self.db.is_some(),
             self.anthropic.is_some(),
             self.dailydev.as_ref().map(|d| d.is_configured()).unwrap_or(false),
+            self.rag.as_ref().map(|r| r.is_ready()).unwrap_or(false),
             if self.config.firebase_configured() { "firebase" } else { "dev" }
         )
     }
@@ -93,9 +101,39 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
 
     let dailydev = Some(DailyDevClient::new(config.daily_dev_token.clone()));
 
+    // embeddings + RAG retrieval (optional until the embeddings key shows up)
+    let rag = config
+        .embeddings_api_key
+        .as_ref()
+        .filter(|k| !k.is_empty())
+        .map(|key| {
+            let settings = EmbeddingSettings {
+                api_key: key.clone(),
+                model: config
+                    .embeddings_model
+                    .clone()
+                    .unwrap_or_else(|| DEFAULT_EMBEDDINGS_MODEL.into()),
+                expected_dim: config.embeddings_dim,
+                base_url: config
+                    .embeddings_base_url
+                    .clone()
+                    .unwrap_or_else(|| DEFAULT_EMBEDDINGS_BASE_URL.into()),
+            };
+            tracing::info!(
+                model = %settings.model,
+                dim = settings.expected_dim,
+                "embeddings enabled (RAG retrieval + ingest)"
+            );
+            RagService::new(EmbeddingClient::new(settings))
+        });
+
     let briefing = match (&anthropic, &dailydev) {
         (Some(a), Some(d)) if a.is_configured() && d.is_configured() => {
-            Some(BriefingService::new(a.clone(), d.clone()))
+            let svc = BriefingService::new(a.clone(), d.clone());
+            Some(match &rag {
+                Some(r) => svc.with_rag(r.clone()),
+                None => svc,
+            })
         }
         _ => {
             tracing::info!(
@@ -112,6 +150,7 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
         capture,
         dailydev,
         briefing,
+        rag,
     }))
 }
 

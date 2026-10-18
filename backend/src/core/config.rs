@@ -37,6 +37,23 @@ pub struct Config {
     /// shared secret guarding POST /cron/briefing
     #[serde(default)]
     pub cron_secret: Option<String>,
+    /// OpenAI-compatible embeddings key (RAG — default provider)
+    #[serde(default)]
+    pub embeddings_api_key: Option<String>,
+    #[serde(default)]
+    pub embeddings_model: Option<String>,
+    #[serde(default)]
+    pub embeddings_base_url: Option<String>,
+    /// must match the migration's `vector(N)` column (default 1536)
+    #[serde(default = "default_embeddings_dim")]
+    pub embeddings_dim: usize,
+    /// where ingest looks for books JSON when the body is empty
+    #[serde(default)]
+    pub books_dir: Option<String>,
+}
+
+fn default_embeddings_dim() -> usize {
+    1536
 }
 
 fn default_max_tokens() -> u32 {
@@ -102,6 +119,11 @@ impl Default for Config {
             firebase_project_id: None,
             daily_dev_token: None,
             cron_secret: None,
+            embeddings_api_key: None,
+            embeddings_model: Some("text-embedding-3-small".into()),
+            embeddings_base_url: None,
+            embeddings_dim: 1536,
+            books_dir: None,
         }
     }
 }

@@ -1,0 +1,26 @@
+[
+  {
+    "book": "Deep Work",
+    "chapter": "Rule 1",
+    "idea": "Four focused hours of deep work routinely outproduce ten hours of shallow, reactive work.",
+    "application": "When a task is cognitively heavy (design, hard debugging, interview prep), schedule it in a dedicated 90–120 minute block before any reactive work.",
+    "tags": ["focus", "scheduling"],
+    "weight": 1.2
+  },
+  {
+    "book": "The Pragmatic Programmer",
+    "chapter": "Topic 22",
+    "idea": "Don't live with broken windows — fix small defects immediately or promise to fix them visibly.",
+    "application": "If a capture mentions buggy code without urgency, suggest a scheduled fix task (not_urgent_important) rather than dropping it.",
+    "tags": ["code", "quality"],
+    "weight": 1.0
+  },
+  {
+    "book": "Atomic Habits",
+    "chapter": "Chapter 5",
+    "idea": "Make it easy: reduce the friction of good habits by preparing the environment in advance.",
+    "application": "When the user plans a recurring practice (LeetCode drills, morning review), suggest pre-staging: open problems the night before, one-click setup.",
+    "tags": ["habits", "practice"],
+    "weight": 1.0
+  }
+]

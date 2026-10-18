@@ -12,6 +12,7 @@ use serde_json::json;
 
 use super::anthropic::{tool_helpers::*, AnthropicClient, Message, Role};
 use super::dailydev::DailyDevClient;
+use super::rag::{KnowledgeHit, RagService};
 use sqlx::PgPool;
 
 use crate::core::error::{AppError, AppResult};
@@ -63,6 +64,8 @@ pub struct StoredBrief {
 pub struct BriefingService {
     anthropic: AnthropicClient,
     dailydev: DailyDevClient,
+    /// R1: book principles retrieved for today's tasks (None → skip silently)
+    rag: Option<RagService>,
 }
 
 const BRIEF_SYSTEM: &str = r#"You are the daily editor of a developer's personal Growth Copilot.
@@ -75,11 +78,14 @@ Rules:
 2. `watchlist`: pick 3–5 daily.dev posts relevant to the user's current tasks,
    stack, and learning goals. For each: verdict = is it worth their time
    (concrete reason or "skip-worthy" arrows).
-3. `leetcode`: pick the pattern to drill today from the due-review list
-   (weight weakest confidence + overdue first).
-4. Never invent tasks, posts, or patterns — the grounding data is authoritative.
-5. headline: one sharp sentence (max 90 chars) characterizing the day.
-6. Answer with exactly ONE `compose_brief` tool call."#;
+3. `leetcode`: pick the pattern to drill today from the LEETCODE_DUE list
+   (weakest confidence + most overdue first). Empty list → drill: null.
+4. `principles_used`: the `[source_ref]`s of PRINCIPLES that genuinely shaped
+   your advice. Only what you used — do not pad the list, and never invent
+   sources.
+5. Never invent tasks, posts, or patterns — the grounding data is authoritative.
+6. headline: one sharp sentence (max 90 chars) characterizing the day.
+7. Answer with exactly ONE `compose_brief` tool call."#;
 
 /// Compact, bounded view of open tasks sent as grounding.
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -90,13 +96,78 @@ struct TaskGround {
     due_date: Option<NaiveDate>,
 }
 
-fn ground_tasks(tasks: Vec<TaskGround>) -> String {
+fn ground_tasks(tasks: &[TaskGround]) -> String {
     serde_json::to_string(&tasks).unwrap_or_else(|_| "[]".into())
+}
+
+/// Patterns due for review today (the brief picks the drill from this list).
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct LeetCodeDue {
+    pattern: String,
+    confidence: i32,
+    next_review: NaiveDate,
+    notes: Option<String>,
+}
+
+async fn ground_leetcode_due(
+    pool: &PgPool,
+    user_id: &str,
+    today: NaiveDate,
+) -> AppResult<Vec<LeetCodeDue>> {
+    let rows: Vec<LeetCodeDue> = sqlx::query_as(
+        "SELECT name, COALESCE(confidence, 1) AS confidence,
+                next_review, notes
+         FROM leetcode_patterns
+         WHERE user_id = $1 AND next_review <= $2
+         ORDER BY next_review, confidence
+         LIMIT 5",
+    )
+    .bind(user_id)
+    .bind(&today)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| AppError::Database(format!("leetcode due lookup: {e}")))?;
+    Ok(rows)
+}
+
+/// R1: retrieve top principles for today's task mix. Any failure → empty.
+async fn retrieve_principles(
+    pool: &PgPool,
+    user_id: &str,
+    service: &BriefingService,
+    tasks: &[TaskGround],
+) -> Vec<KnowledgeHit> {
+    let Some(rag) = service.rag.as_ref() else {
+        return Vec::new();
+    };
+    if !rag.is_ready() || tasks.is_empty() {
+        return Vec::new();
+    }
+    // query = the day's task titles (compact — retrieval only needs gist)
+    let query = tasks
+        .iter()
+        .take(5)
+        .map(|t| t.title.as_str())
+        .collect::<Vec<_>>()
+        .join("; ");
+    match rag.retrieve(pool, user_id, &query, 3).await {
+        Ok(hits) => hits,
+        Err(e) => {
+            tracing::warn!(error = %e, "principle retrieval failed — brief proceeds without RAG");
+            Vec::new()
+        }
+    }
 }
 
 impl BriefingService {
     pub fn new(anthropic: AnthropicClient, dailydev: DailyDevClient) -> Self {
-        Self { anthropic, dailydev }
+        Self { anthropic, dailydev, rag: None }
+    }
+
+    /// Wire the principles engine (R1). Optional — briefing works without it.
+    pub fn with_rag(mut self, rag: RagService) -> Self {
+        self.rag = Some(rag);
+        self
     }
 
     pub fn is_ready(&self) -> bool {
@@ -209,15 +280,32 @@ impl BriefingService {
         };
 
         let ground_plus_watch = format!(
-            "TASKS: {}\n\nFEED: {}",
-            ground_tasks(tasks),
+            "TASKS: {}\n\nFEED: {}\n\nLEETCODE_DUE: {}",
+            ground_tasks(&tasks),
             serde_json::to_string(&serde_json::json!({
                 "foryou": feeds.for_you.iter().take(8).collect::<Vec<_>>(),
                 "discussed": feeds.discussed.iter().take(6).collect::<Vec<_>>(),
                 "fetched_at": feeds.fetched_at
             }))
-            .unwrap_or_default()
+            .unwrap_or_default(),
+            serde_json::to_string(&ground_leetcode_due(pool, user_id, date).await.unwrap_or_default())
+                .unwrap_or_default()
         );
+
+        // principles (R1): retrieved for today's tasks; empty when not wired.
+        let principles = retrieve_principles(pool, user_id, self, &tasks).await;
+        let principles_block = if principles.is_empty() {
+            String::new()
+        } else {
+            format!(
+                "\n\nPRINCIPLES (from the user's books — weave in where the `why` genuinely calls for one):\n{}",
+                principles
+                    .iter()
+                    .map(|h| format!("- {} [{}]", h.content, h.source_ref))
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            )
+        };
 
         // 3. ONE composed call — fuel for the whole day
         let resp = self
@@ -226,7 +314,7 @@ impl BriefingService {
                 vec![Message {
                     role: Role::User,
                     content: format!(
-                        "Compose today's ({date}) alerting brief.\n{ground_plus_watch}"
+                        "Compose today's ({date}) alerting brief.\n{ground_plus_watch}{principles_block}"
                     ),
                 }],
                 Some(BRIEF_SYSTEM.to_string()),

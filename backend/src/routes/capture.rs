@@ -40,7 +40,8 @@ pub async fn capture(
         AppError::Unavailable("capture service not configured (no Anthropic key)".into())
     })?;
 
-    let tasks = service.capture(&req.text).await?;
+    let principles = retrieve_principles(&state, &auth.0, &req.text, 2).await;
+    let tasks = service.capture(&req.text, &principles).await?;
 
     // Optional persistence — flips on with DATABASE_URL, stays silent otherwise.
     let saved_to_db = match &state.db {
@@ -53,6 +54,29 @@ pub async fn capture(
     };
 
     Ok(Json(CaptureResponse { tasks, saved_to_db }))
+}
+
+/// R2: top-k book principles for this capture text. Requires db + rag; on any
+/// failure returns `[]` — capture must never break because retrieval did.
+async fn retrieve_principles(
+    state: &AppState,
+    user_id: &str,
+    text: &str,
+    k: usize,
+) -> Vec<String> {
+    let (Some(pool), Some(rag)) = (&state.db, &state.rag) else {
+        return Vec::new();
+    };
+    if !rag.is_ready() {
+        return Vec::new();
+    }
+    match rag.retrieve(pool, user_id, text, k).await {
+        Ok(hits) => hits.iter().map(|h| h.content.clone()).collect(),
+        Err(e) => {
+            tracing::warn!(error = %e, "principle retrieval failed — capture proceeds without RAG");
+            Vec::new()
+        }
+    }
 }
 
 async fn save_tasks(
