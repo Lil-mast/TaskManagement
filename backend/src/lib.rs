@@ -71,7 +71,7 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
                 model: config
                     .anthropic_model
                     .clone()
-                    .unwrap_or_else(|| "claude-sonnet-4-20250514".into()),
+                    .unwrap_or_else(|| "claude-sonnet-5-5".into()),
                 max_tokens: config.anthropic_max_tokens,
                 max_input_chars: config.anthropic_max_input_chars,
                 requests_per_minute: config.rate_limit_rpm,

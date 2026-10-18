@@ -4,12 +4,14 @@ use figment::{providers::Env, Figment};
 use serde::Deserialize;
 
 /// Everything the app needs, sourced from the environment (prefixed `GROWTH_`).
-///
-/// Optional fields (DB URL, Anthropic key, Firebase project) let the backend
 /// boot gracefully in partial setups — `/healthz` reflects what's wired.
 #[derive(Debug, Clone, Deserialize)]
 pub struct Config {
     pub port: u16,
+    #[serde(
+        default = "default_cors_origins",
+        deserialize_with = "cors_list::deserialize"
+    )] // debug: allow comma-separated string or TOML-style list
     pub cors_origins: Vec<String>,
     #[serde(default)]
     pub database_url: Option<String>,
@@ -34,6 +36,37 @@ pub struct Config {
 fn default_max_tokens() -> u32 {
     4096
 }
+fn default_cors_origins() -> Vec<String> {
+    vec!["http://localhost:5173".into()]
+}
+
+/// Accepts either a TOML-style list (`GROWTH_CORS_ORIGINS=["http://a","http://b"]`)
+/// or a plain comma-separated string (`GROWTH_CORS_ORIGINS=http://a,http://b`).
+mod cors_list {
+    use serde::{Deserialize, Deserializer};
+
+    pub fn deserialize<'de, D>(d: D) -> Result<Vec<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            List(Vec<String>),
+            One(String),
+        }
+
+        match Raw::deserialize(d) {
+            Ok(Raw::List(v)) => Ok(v),
+            Ok(Raw::One(s)) => Ok(s
+                .split(',')
+                .map(|item| item.trim().to_string())
+                .filter(|item| !item.is_empty())
+                .collect()),
+            Err(e) => Err(e),
+        }
+    }
+}
 fn default_max_input_chars() -> usize {
     60_000
 }
@@ -54,7 +87,7 @@ impl Default for Config {
             cors_origins: vec!["http://localhost:5173".into()],
             database_url: None,
             anthropic_api_key: None,
-            anthropic_model: Some("claude-sonnet-4-20250514".into()),
+            anthropic_model: Some("claude-sonnet-5-5".into()),
             anthropic_max_tokens: 4096,
             anthropic_max_input_chars: 60_000,
             rate_limit_rpm: 20,
@@ -75,7 +108,10 @@ impl Config {
             .select("*");
         let cfg: Config = match figment.extract() {
             Ok(c) => c,
-            Err(_) => Config::default(),
+            Err(e) => {
+                eprintln!("[config] extract failed, using defaults: {e}");
+                Config::default()
+            }
         };
         // tolerate plain PORT set by hosts (flyio/railway pattern)
         if let Ok(port) = env::var("PORT") {
