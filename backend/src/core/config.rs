@@ -31,6 +31,12 @@ pub struct Config {
     pub max_retries: u32,
     #[serde(default)]
     pub firebase_project_id: Option<String>,
+    /// daily.dev Public API personal access token
+    #[serde(default)]
+    pub daily_dev_token: Option<String>,
+    /// shared secret guarding POST /cron/briefing
+    #[serde(default)]
+    pub cron_secret: Option<String>,
 }
 
 fn default_max_tokens() -> u32 {
@@ -94,6 +100,8 @@ impl Default for Config {
             rate_limit_concurrency: 3,
             max_retries: 4,
             firebase_project_id: None,
+            daily_dev_token: None,
+            cron_secret: None,
         }
     }
 }

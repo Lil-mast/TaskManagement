@@ -117,9 +117,10 @@ cargo test
    because it is the fastest way to verify the rate-limited Claude integration
    end-to-end. Phase 1 completes it with persistence on by default + the SPA rewire.
 
-## Next steps (Phase 1 — see `../docs/phases/PHASE_1.md`)
+## Next steps (Phase 1 — status: backend built, see `../docs/phases/PHASE_1.md`)
 
-- `GET/POST/PATCH/DELETE /api/tasks` parity vs the old direct-Supabase calls
-- daily.dev connector + 24h cache table usage
-- morning brief: one composed Claude call → `GET /api/briefing` (+ accept-to-matrix)
-- switch `sqlx` to compile-time-checked macros with offline prepared metadata
+- ✅ `GET/POST/PATCH/DELETE /api/tasks` — shipped (soft-delete = trash)
+- ✅ daily.dev connector + 24h cache — shipped
+- ✅ morning brief: `GET /api/briefing` (+ refresh / accept / cron) — shipped
+- ⬜ flip `sqlx` to compile-time-checked macros (needs DATABASE_URL on build host)
+- ⬜ run migration 0001 against live Supabase; flip SPA to backend source of truth
