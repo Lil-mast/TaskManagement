@@ -1,5 +1,4 @@
 //! daily.dev Public API connector.
-//!
 //! Token stays server-side (`GROWTH_DAILY_DEV_TOKEN`); every feed is cached in
 //! the `dailydev_cache` table with a 24h TTL so the API is touched at most
 //! once per day per user per feed.

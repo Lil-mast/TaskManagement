@@ -1,7 +1,11 @@
 pub mod anthropic;
 pub mod briefing;
+pub mod calendar;
 pub mod capture;
+pub mod crypto;
 pub mod dailydev;
 pub mod embeddings;
+pub mod google;
 pub mod leetcode;
+pub mod planner;
 pub mod rag;

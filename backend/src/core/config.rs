@@ -50,6 +50,16 @@ pub struct Config {
     /// where ingest looks for books JSON when the body is empty
     #[serde(default)]
     pub books_dir: Option<String>,
+    /// Google OAuth client (Phase 3 calendar, Phase 4 gmail)
+    #[serde(default)]
+    pub google_client_id: Option<String>,
+    #[serde(default)]
+    pub google_client_secret: Option<String>,
+    #[serde(default)]
+    pub google_redirect_url: Option<String>,
+    /// hex-encoded 32-byte master key for AES-GCM token encryption
+    #[serde(default)]
+    pub token_enc_key: Option<String>,
 }
 
 fn default_embeddings_dim() -> usize {
@@ -124,6 +134,10 @@ impl Default for Config {
             embeddings_base_url: None,
             embeddings_dim: 1536,
             books_dir: None,
+            google_client_id: None,
+            google_client_secret: None,
+            google_redirect_url: None,
+            token_enc_key: None,
         }
     }
 }
@@ -165,5 +179,17 @@ impl Config {
             .as_deref()
             .map(|p| !p.is_empty())
             .unwrap_or(false)
+    }
+
+    pub fn google_configured(&self) -> bool {
+        self.google_client_id
+            .as_deref()
+            .map(|p| !p.is_empty())
+            .unwrap_or(false)
+            && self
+                .google_client_secret
+                .as_deref()
+                .map(|p| !p.is_empty())
+                .unwrap_or(false)
     }
 }

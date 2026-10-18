@@ -80,12 +80,15 @@ Rules:
    (concrete reason or "skip-worthy" arrows).
 3. `leetcode`: pick the pattern to drill today from the LEETCODE_DUE list
    (weakest confidence + most overdue first). Empty list → drill: null.
-4. `principles_used`: the `[source_ref]`s of PRINCIPLES that genuinely shaped
+4. `priorities` must fit around the CALENDAR blocks: a packed-meeting day
+   means fewer, sharper priorities; open a cleared afternoon means deep work.
+5. `principles_used`: the `[source_ref]`s of PRINCIPLES that genuinely shaped
    your advice. Only what you used — do not pad the list, and never invent
    sources.
-5. Never invent tasks, posts, or patterns — the grounding data is authoritative.
-6. headline: one sharp sentence (max 90 chars) characterizing the day.
-7. Answer with exactly ONE `compose_brief` tool call."#;
+6. Never invent tasks, posts, patterns, or events — the grounding is
+   authoritative.
+7. headline: one sharp sentence (max 90 chars) characterizing the day.
+8. Answer with exactly ONE `compose_brief` tool call."#;
 
 /// Compact, bounded view of open tasks sent as grounding.
 #[derive(Debug, Serialize, sqlx::FromRow)]
@@ -127,6 +130,30 @@ async fn ground_leetcode_due(
     .fetch_all(pool)
     .await
     .map_err(|e| AppError::Database(format!("leetcode due lookup: {e}")))?;
+    Ok(rows)
+}
+
+/// Next-7-day meeting load from the mirrored calendar (synced separately).
+/// Empty when not connected — grounding never invents events.
+#[derive(Debug, Serialize, sqlx::FromRow)]
+struct CalendarGround {
+    title: String,
+    start_at: chrono::DateTime<Utc>,
+    end_at: chrono::DateTime<Utc>,
+}
+
+async fn ground_calendar(pool: &PgPool, user_id: &str) -> AppResult<Vec<CalendarGround>> {
+    let rows: Vec<CalendarGround> = sqlx::query_as(
+        "SELECT COALESCE(NULLIF(title, ''), '(busy)') AS title, start_at, end_at
+         FROM calendar_events
+         WHERE user_id = $1 AND busy AND start_at >= NOW()
+         ORDER BY start_at
+         LIMIT 30",
+    )
+    .bind(user_id)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| AppError::Database(format!("calendar grounding: {e}")))?;
     Ok(rows)
 }
 
@@ -280,7 +307,7 @@ impl BriefingService {
         };
 
         let ground_plus_watch = format!(
-            "TASKS: {}\n\nFEED: {}\n\nLEETCODE_DUE: {}",
+            "TASKS: {}\n\nFEED: {}\n\nLEETCODE_DUE: {}\n\nCALENDAR (next 7 days, meeting load the priorities must account for): {}",
             ground_tasks(&tasks),
             serde_json::to_string(&serde_json::json!({
                 "foryou": feeds.for_you.iter().take(8).collect::<Vec<_>>(),
@@ -289,6 +316,8 @@ impl BriefingService {
             }))
             .unwrap_or_default(),
             serde_json::to_string(&ground_leetcode_due(pool, user_id, date).await.unwrap_or_default())
+                .unwrap_or_default(),
+            serde_json::to_string(&ground_calendar(pool, user_id).await.unwrap_or_default())
                 .unwrap_or_default()
         );
 

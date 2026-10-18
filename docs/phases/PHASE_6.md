@@ -27,6 +27,13 @@ Firebase/Supabase identity debt.
 6. **Observability** — tracing to stdout with sensible spans
    (`db`, `anthropic`, `rag` with sampling), error logging wired to structure
    rather than prints
+7. **Consolidated migration** — after the feature phases land, replace the
+   incremental 0001–000N files with one clean baseline migration that:
+   - drops any existing tables incompatible with the agents' actual functions
+     (decision recorded 2026-10-19: e.g. pre-existing SPA tables the backend
+     does not own, stale schemas no agent reads)
+   - reflects the final canonical schema only
+   - ships with a data-migration path or an explicit data-reset note
 
 ## Acceptance criteria
 

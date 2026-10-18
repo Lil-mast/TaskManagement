@@ -11,6 +11,7 @@ use core::config::Config;
 use services::anthropic::{AnthropicClient, AnthropicSettings, DEFAULT_BASE_URL};
 use services::briefing::BriefingService;
 use services::capture::CaptureService;
+use services::calendar::CalendarService;
 use services::dailydev::DailyDevClient;
 use services::embeddings::{
     EmbeddingClient, EmbeddingSettings, DEFAULT_EMBEDDINGS_BASE_URL,
@@ -32,16 +33,21 @@ pub struct AppState {
     pub briefing: Option<BriefingService>,
     /// RAG retrieval — needs the embeddings key; DB joins per-request
     pub rag: Option<RagService>,
+    /// Google Calendar (needs client id/secret + token encryption key)
+    pub calendar: Option<CalendarService>,
+    /// token-at-rest crypto object shared by integration features
+    pub token_crypto: Option<services::crypto::TokenCrypto>,
 }
 
 impl AppState {
     pub fn health_snapshot(&self) -> String {
         format!(
-            "db={} anthropic={} dailydev={} rag={} auth={}",
+            "db={} anthropic={} dailydev={} rag={} google={} auth={}",
             self.db.is_some(),
             self.anthropic.is_some(),
             self.dailydev.as_ref().map(|d| d.is_configured()).unwrap_or(false),
             self.rag.as_ref().map(|r| r.is_ready()).unwrap_or(false),
+            self.calendar.as_ref().map(|c| c.is_configured()).unwrap_or(false),
             if self.config.firebase_configured() { "firebase" } else { "dev" }
         )
     }
@@ -143,6 +149,48 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
         }
     };
 
+    // token-at-rest crypto (needs the hex-encoded 32-byte master key)
+    let token_crypto = match config.token_enc_key.as_deref() {
+        Some(hex_key) => match services::crypto::TokenCrypto::from_hex(hex_key) {
+            Some(c) => Some(c),
+            None => {
+                tracing::warn!(
+                    "GROWTH_TOKEN_ENC_KEY set but not valid hex-32 — google integration disabled"
+                );
+                None
+            }
+        },
+        None => None,
+    };
+    let calendar = match token_crypto
+        .as_ref()
+        .filter(|_| config.google_configured())
+    {
+        Some(crypto) => {
+            let settings = services::google::GoogleSettings {
+                client_id: config.google_client_id.clone().unwrap_or_default(),
+                client_secret: config.google_client_secret.clone().unwrap_or_default(),
+                redirect_url: config
+                    .google_redirect_url
+                    .clone()
+                    .unwrap_or_else(|| "http://localhost:8000/api/integrations/google/callback".into()),
+                scope: services::google::CALENDAR_SCOPE.into(),
+            };
+            tracing::info!(
+                redirect = %settings.redirect_url,
+                "google calendar integration enabled"
+            );
+            Some(CalendarService::new(
+                services::google::GoogleClient::new(settings),
+                crypto.clone(),
+            ))
+        }
+        None => {
+            tracing::info!("google calendar disabled (needs GROWTH_GOOGLE_CLIENT_ID/SECRET + GROWTH_TOKEN_ENC_KEY)");
+            None
+        }
+    };
+
     Ok(Arc::new(AppState {
         config: config.clone(),
         db,
@@ -151,6 +199,8 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
         dailydev,
         briefing,
         rag,
+        calendar,
+        token_crypto,
     }))
 }
 
