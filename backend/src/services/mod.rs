@@ -10,3 +10,4 @@ pub mod google;
 pub mod leetcode;
 pub mod planner;
 pub mod rag;
+pub mod review;

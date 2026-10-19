@@ -69,7 +69,7 @@ async fn run_morning_brief(
 
 /// Guard: `x-cron-secret` must match `GROWTH_CRON_SECRET`; the route stays
 /// hard-503 when no secret is configured (production MUST set one).
-struct CronSecret;
+pub(crate) struct CronSecret;
 
 impl axum::extract::FromRequestParts<Arc<AppState>> for CronSecret {
     type Rejection = AppError;

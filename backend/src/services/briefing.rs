@@ -208,7 +208,7 @@ async fn retrieve_principles(
         .map(|t| t.title.as_str())
         .collect::<Vec<_>>()
         .join("; ");
-    match rag.retrieve(pool, user_id, &query, 3).await {
+    match rag.retrieve(pool, user_id, &query, 3, "brief").await {
         Ok(hits) => hits,
         Err(e) => {
             tracing::warn!(error = %e, "principle retrieval failed — brief proceeds without RAG");

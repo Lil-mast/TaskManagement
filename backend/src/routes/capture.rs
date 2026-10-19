@@ -70,7 +70,7 @@ async fn retrieve_principles(
     if !rag.is_ready() {
         return Vec::new();
     }
-    match rag.retrieve(pool, user_id, text, k).await {
+    match rag.retrieve(pool, user_id, text, k, "capture").await {
         Ok(hits) => hits.iter().map(|h| h.content.clone()).collect(),
         Err(e) => {
             tracing::warn!(error = %e, "principle retrieval failed — capture proceeds without RAG");

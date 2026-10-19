@@ -229,12 +229,18 @@ impl RagService {
     /// Hybrid: vector cosine (HNSW) ⊕ lexical ts_rank, fused with Reciprocal
     /// Rank Fusion (k=60). When embeddings are not configured this returns an
     /// empty list — features degrade gracefully, never hard-fail.
+    ///
+    /// Quarantined principles (effective_weight ≤ 0.15) never surface here —
+    /// they stay in the corpus, they just stop showing up (PHASE_5 §3).
+    /// `source` (brief|capture|email) is logged as retrieval provenance for
+    /// the weekly re-weighting; anything else is logged nothing.
     pub async fn retrieve(
         &self,
         pool: &PgPool,
         user_id: &str,
         query: &str,
         k: usize,
+        source: &str,
     ) -> AppResult<Vec<KnowledgeHit>> {
         let query = query.trim();
         if query.is_empty() || !self.is_ready() {
@@ -276,15 +282,17 @@ fused AS (
     SELECT id, 1.0 / (60 + ROW_NUMBER() OVER (ORDER BY rank DESC)) AS s FROM lex_results
 )
 SELECT kc.id, kc.content, COALESCE(kc.meta->>'source_ref', '') AS source_ref,
-       SUM(f.s)::float8 AS score
+       (SUM(f.s) * MAX(ki.effective_weight))::float8 AS score
 FROM fused f
 JOIN knowledge_chunks kc ON kc.id = f.id
-GROUP BY kc.id, kc.content, kc.meta
+JOIN knowledge_items ki ON ki.id = kc.knowledge_item_id
+WHERE ki.effective_weight > 0.15
+GROUP BY kc.id, kc.content, kc.meta, ki.effective_weight
 ORDER BY score DESC
 LIMIT $6
 "#;
 
-        let fetch = (k.max(1) * 2) as i64;
+let fetch = (k.max(1) * 2) as i64;
         let hits = sqlx::query_as::<_, KnowledgeHit>(sql)
             .bind(&vec_literal)
             .bind(user_id)
@@ -295,6 +303,7 @@ LIMIT $6
             .fetch_all(pool)
             .await
             .map_err(|e| AppError::Database(format!("rag retrieve: {e}")))?;
+        log_surface(pool, user_id, source, &hits).await;
         Ok(hits)
     }
 
@@ -310,6 +319,83 @@ LIMIT $6
         .await
         .map_err(|e| AppError::Database(format!("rag upvote: {e}")))?;
         Ok(())
+    }
+
+    // -----------------------------------------------------------------------
+    // Phase 5: weekly re-weighting (RAG_PIPELINE §7)
+    // -----------------------------------------------------------------------
+
+    /// Recompute `effective_weight` for every principle, then quarantine the
+    /// underperformers.
+    ///
+    /// Formula (documented deviation from the raw §7 math in PHASE_5.md):
+    ///   effective = base_weight × (1 + ln(1 + accepted_count)) / (1 + conflicts)
+    /// — the `1 +` floor keeps never-accepted principles neutral (weight ≈
+    /// base) instead of collapsing them outright.
+    ///
+    /// Quarantine: principles surfaced ≥ `QUARANTINE_SURFACES` times over 30
+    /// days with zero accepts drop to 0.1 — corpus stays intact, retrieval
+    /// just stops surfacing them (weight ≤ 0.15 is the exclusion line).
+    pub async fn reweight(&self, pool: &PgPool) -> AppResult<usize> {
+        let scored = sqlx::query(
+            "UPDATE knowledge_items
+             SET effective_weight =
+                 GREATEST(0.1::real,
+                          (weight::float8
+                           * (1 + ln(1 + GREATEST(COALESCE(accepted_count, 0), 0))::float8)
+                           / (1 + COALESCE(conflicts, 0)))::real)",
+        )
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Database(format!("reweight formula: {e}")))?;
+
+        let quarantined = sqlx::query(
+            "UPDATE knowledge_items ki
+             SET effective_weight = 0.1
+             WHERE ki.effective_weight > 0.1
+               AND COALESCE(ki.accepted_count, 0) = 0
+               AND (
+                 SELECT COUNT(*) FROM knowledge_surface_log sl
+                 WHERE sl.knowledge_item_id = ki.id
+                   AND sl.surfaced_at >= NOW() - INTERVAL '30 days'
+               ) >= $1",
+        )
+        .bind(QUARANTINE_SURFACES)
+        .execute(pool)
+        .await
+        .map_err(|e| AppError::Database(format!("reweight quarantine: {e}")))?;
+
+        tracing::info!(
+            formula = scored.rows_affected(),
+            quarantined = quarantined.rows_affected(),
+            "RAG re-weighting done"
+        );
+        Ok((scored.rows_affected() + quarantined.rows_affected()) as usize)
+    }
+}
+
+/// Surfacing threshold for quarantine (30-day window).
+pub const QUARANTINE_SURFACES: i64 = 10;
+
+/// Retrieval provenance (§5): briefs/capture/email record what they surfaced
+/// so weekly re-weighting can see acceptance-vs-surfacing. Best-effort —
+/// logging failure must never break the feature that surfaced.
+async fn log_surface(pool: &PgPool, user_id: &str, source: &str, hits: &[KnowledgeHit]) {
+    if hits.is_empty() || !matches!(source, "brief" | "capture" | "email") {
+        return;
+    }
+    let ids: Vec<uuid::Uuid> = hits.iter().map(|h| h.id).collect();
+    let logged = sqlx::query(
+        "INSERT INTO knowledge_surface_log (user_id, knowledge_item_id, source)
+         SELECT $1, item_id, $2 FROM UNNEST($3) AS item_id",
+    )
+    .bind(user_id)
+    .bind(source)
+    .bind(&ids)
+    .execute(pool)
+    .await;
+    if let Err(e) = logged {
+        tracing::debug!(error = %e, "surface log write skipped");
     }
 }
 

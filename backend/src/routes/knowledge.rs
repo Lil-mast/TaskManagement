@@ -27,6 +27,7 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/items", get(list_items))
         .route("/search", post(search))
         .route("/feedback", post(feedback))
+        .route("/weights", get(weights))
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -107,7 +108,7 @@ async fn search(
     let rag = require_rag(&state)?;
     let pool = require_db(&state)?;
     let hits = rag
-        .retrieve(pool, &auth.0, &body.query, body.k.unwrap_or(6))
+        .retrieve(pool, &auth.0, &body.query, body.k.unwrap_or(6), "search")
         .await?;
     Ok(Json(hits))
 }
@@ -127,6 +128,62 @@ async fn feedback(
     let pool = require_db(&state)?;
     rag.upvote(pool, &auth.0, body.item_id).await?;
     Ok(Json(json!({ "ok": true, "item_id": body.item_id })))
+}
+
+/// `GET /api/knowledge/weights` — live influence of each principle:
+/// base weight, effective weight (RAG §7), accepts, conflicts, surfacing in
+/// the last 30 days, and the quarantine flag.
+async fn weights(
+    State(state): State<Arc<AppState>>,
+    auth: AuthUser,
+) -> AppResult<Json<serde_json::Value>> {
+    let pool = require_db(&state)?;
+    #[derive(Debug, Serialize, sqlx::FromRow)]
+    struct WeightRow {
+        id: uuid::Uuid,
+        book: String,
+        idea: String,
+        weight: f64,
+        effective_weight: f64,
+        accepted_count: i64,
+        conflicts: i64,
+        surfaced_30d: i64,
+    }
+
+    let rows: Vec<WeightRow> = sqlx::query_as(
+        "SELECT ki.id, ki.book, ki.idea,
+                ki.weight::float8 AS weight,
+                ki.effective_weight::float8 AS effective_weight,
+                COALESCE(ki.accepted_count, 0)::bigint AS accepted_count,
+                COALESCE(ki.conflicts, 0)::bigint AS conflicts,
+                (SELECT COUNT(*) FROM knowledge_surface_log sl
+                 WHERE sl.knowledge_item_id = ki.id
+                   AND sl.surfaced_at >= NOW() - INTERVAL '30 days')::bigint
+                    AS surfaced_30d
+         FROM knowledge_items ki
+         WHERE ki.user_id = $1
+         ORDER BY ki.effective_weight DESC,
+                  COALESCE(ki.accepted_count, 0) DESC, ki.book",
+    )
+    .bind(&auth.0)
+    .fetch_all(pool)
+    .await
+    .map_err(|e| AppError::Database(format!("weights read: {e}")))?;
+
+    let quarantined: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM knowledge_items
+         WHERE user_id = $1 AND effective_weight <= 0.15",
+    )
+    .bind(&auth.0)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| AppError::Database(format!("weights count: {e}")))?;
+
+    Ok(Json(json!({
+        "items": rows,
+        "quarantined": quarantined,
+        "note": "quarantine = effective_weight ≤ 0.1 — deprioritized, never deleted"
+    })))
 }
 
 // ---------------------------------------------------------------------------

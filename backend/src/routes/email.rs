@@ -128,7 +128,7 @@ async fn retrieve_triage_rules(state: &AppState, user_id: &str) -> Vec<String> {
     if !rag.is_ready() {
         return Vec::new();
     }
-    match rag.retrieve(pool, user_id, "email inbox triage rules reply as task ignore", 3).await {
+    match rag.retrieve(pool, user_id, "email inbox triage rules reply as task ignore", 3, "email").await {
         Ok(hits) => hits.into_iter().map(|h| h.content).collect(),
         Err(e) => {
             tracing::warn!(error = %e, "triage rule retrieval failed — using defaults");
