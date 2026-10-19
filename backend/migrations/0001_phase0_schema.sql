@@ -101,27 +101,24 @@ ALTER TABLE email_triage    ENABLE ROW LEVEL SECURITY;
 DO $$
 DECLARE
     t TEXT;
+    act TEXT;
+    pol TEXT;
     tables TEXT[] := ARRAY['integrations','daily_briefings','dailydev_cache',
                             'leetcode_patterns','leetcode_attempts','email_triage'];
-    i INT;
 BEGIN
-    FOR i IN 1..COALESCE(array_length(tables, 1), 0) LOOP
-        t := tables[i];
-        EXECUTE format(
-            'CREATE POLICY IF NOT EXISTS %I_select ON %I FOR SELECT
-                USING (user_id = current_setting(''app.current_user_id'', true))',
-            t, t);
-        EXECUTE format(
-            'CREATE POLICY IF NOT EXISTS %I_insert ON %I FOR INSERT
-                WITH CHECK (user_id = current_setting(''app.current_user_id'', true))',
-            t, t);
-        EXECUTE format(
-            'CREATE POLICY IF NOT EXISTS %I_update ON %I FOR UPDATE
-                USING (user_id = current_setting(''app.current_user_id'', true))',
-            t, t);
-        EXECUTE format(
-            'CREATE POLICY IF NOT EXISTS %I_delete ON %I FOR DELETE
-                USING (user_id = current_setting(''app.current_user_id'', true))',
-            t, t);
+    FOREACH t IN ARRAY tables LOOP
+        FOREACH act IN ARRAY ARRAY['select','insert','update','delete'] LOOP
+            pol := t || '_' || act;
+            IF NOT EXISTS (
+                SELECT 1 FROM pg_policies
+                WHERE tablename = t AND policyname = pol
+            ) THEN
+                EXECUTE format(
+                    'CREATE POLICY %I ON %I FOR %s %s (user_id = current_setting(''app.current_user_id'', true))',
+                    pol, t, upper(act),
+                    CASE WHEN act = 'insert' THEN 'WITH CHECK' ELSE 'USING' END
+                );
+            END IF;
+        END LOOP;
     END LOOP;
-END$$;
+END $$;
