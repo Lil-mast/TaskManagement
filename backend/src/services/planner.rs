@@ -1,4 +1,4 @@
-//! proposal binding to unscheduled Schedule-quadrant tasks. Nothing here
+//! proposal binding to unscheduled Schedule-priority tasks. Nothing here
 //! writes to the matrix: proposals stay proposals (human-in-the-loop).
 
 use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
@@ -150,7 +150,7 @@ fn push_gap(out: &mut Vec<Gap>, start: DateTime<Utc>, end: DateTime<Utc>, cfg: &
     }
 }
 
-/// Bind unscheduled Schedule-quadrant tasks to gaps, greedily: each task gets
+/// Bind unscheduled Schedule-priority tasks to gaps, greedily: each task gets
 /// the biggest remaining gap (whole-gap honest, capped at 120 min). Proposals
 /// only — nothing touches the matrix.
 pub fn suggest_schedule(

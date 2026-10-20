@@ -19,7 +19,7 @@
     "application": "Match effort to the requirement — prototype-grade for experiments, production-grade only where stakes demand it.", "tags": ["quality", "scoping"], "weight": 1.0 },
   { "book": "The Pragmatic Programmer", "chapter": "Tip 8 — Invest Regularly in Your Knowledge Portfolio",
     "idea": "Diversify and grow your knowledge portfolio: learn several languages, one every few years, a little bit regularly.",
-    "application": "Feed the daily learning loop: standing 30-minute learning tasks (books, feed articles, LeetCode) are quadrant-2 work that compounds.", "tags": ["career", "learning"], "weight": 1.3 },
+    "application": "Feed the daily learning loop: standing 30-minute learning tasks (books, feed articles, LeetCode) are long-block schedule-class work that compounds.", "tags": ["career", "learning"], "weight": 1.3 },
   { "book": "The Pragmatic Programmer", "chapter": "Tip 9 — Critically Analyze What You Read and Hear",
     "idea": "Critically analyze what you read: take vendor claims, blog posts, and AI output as starting points requiring verification.",
     "application": "When briefing or capture draws on feed articles or LLM suggestions, surface the source and invite verification before committing to action.", "tags": ["learning", "discipline"], "weight": 1.2 },

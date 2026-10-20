@@ -91,12 +91,12 @@ async fn save_tasks(
             "source": "nl_capture_phase0"
         });
         sqlx::query(
-            "INSERT INTO tasks (title, description, quadrant, user_id, source, tags, meta)
+            "INSERT INTO tasks (title, description, priority, user_id, source, tags, meta)
              VALUES ($1, $2, $3, $4, 'nl_capture', $5, $6)",
         )
         .bind(&task.title)
         .bind(task.description.as_deref().unwrap_or(""))
-        .bind(task.quadrant.as_db_string())
+        .bind(task.priority.as_db_string())
         .bind(user_id)
         .bind(&task.tags)
         .bind(meta)

@@ -1,6 +1,6 @@
 //! LeetCode interview prep — pattern library + attempt logging with an SM-2
 //! style spaced-repetition scheduler. Reviews surface as real tasks in the
-//! Schedule quadrant (`source: leetcode`), so the matrix owns the calendar.
+//! Schedule priority (`source: leetcode`), so the matrix owns the calendar.
 
 use chrono::NaiveDate;
 use serde::{Deserialize, Serialize};
@@ -68,7 +68,7 @@ pub struct PatternUpsertBody {
 pub struct AttemptResult {
     pub attempt: LeetCodeAttempt,
     pub reschedule: Reschedule,
-    /// review task that appeared in the Schedule quadrant (or NULL when none)
+    /// review task that appeared in the Schedule priority (or NULL when none)
     pub review_task_id: Option<uuid::Uuid>,
     pub review_due: Option<NaiveDate>,
 }
@@ -198,7 +198,7 @@ pub async fn recent_attempts(
 }
 
 /// The heart: log an attempt, reschedule the pattern, replace its open review
-/// task in the matrix (upsert-by-meta keeps the Schedule quadrant tidy).
+/// task in the matrix (upsert-by-meta keeps the Schedule priority tidy).
 pub async fn log_attempt(
     pool: &PgPool,
     user_id: &str,
@@ -323,9 +323,9 @@ pub async fn log_attempt(
                         existing
                     } else {
                         let new_id: uuid::Uuid = sqlx::query_scalar(
-                            "INSERT INTO tasks (title, quadrant, user_id, due_date,
+                            "INSERT INTO tasks (title, priority, user_id, due_date,
                                                 source, meta)
-                             VALUES ($1, 'not_urgent_important', $2, $3, 'leetcode', $4)
+                             VALUES ($1, 'schedule', $2, $3, 'leetcode', $4)
                              RETURNING id",
                         )
                         .bind(&title)

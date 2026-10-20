@@ -129,7 +129,7 @@ async fn tool_use_blocks_are_parsed() {
             "content": [
                 { "type": "text", "text": "got it" },
                 { "type": "tool_use", "id": "tu_1", "name": "create_task",
-                  "input": { "title": "Review PRs", "quadrant": "urgent_important" } }
+                  "input": { "title": "Review PRs", "priority": "schedule" } }
             ],
             "usage": { "input_tokens": 5, "output_tokens": 30 }
         })))

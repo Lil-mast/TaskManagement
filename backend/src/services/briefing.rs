@@ -97,7 +97,7 @@ Rules:
 struct TaskGround {
     id: uuid::Uuid,
     title: String,
-    quadrant: String,
+    priority: String,
     due_date: Option<NaiveDate>,
 }
 
@@ -326,7 +326,7 @@ impl BriefingService {
     async fn compose(&self, pool: &PgPool, user_id: &str, date: NaiveDate) -> AppResult<StoredBrief> {
         // 1. grounding: open tasks (max 50) — due-today / overdue first
         let tasks = sqlx::query_as::<_, TaskGround>(
-            "SELECT id, title, quadrant, due_date FROM tasks
+            "SELECT id, title, priority, due_date FROM tasks
              WHERE user_id = $1 AND status = 'open'
              ORDER BY due_date NULLS LAST, created_at DESC
              LIMIT 50",
@@ -454,12 +454,12 @@ impl BriefingService {
         let source = item.source.unwrap_or_else(|| "ai_briefing".to_string());
         let meta = serde_json::json!({ "accepted_from": "brief" });
         let id: uuid::Uuid = sqlx::query_scalar(
-            "INSERT INTO tasks (title, description, quadrant, user_id, due_date, source, meta)
+            "INSERT INTO tasks (title, description, priority, user_id, due_date, source, meta)
              VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id",
         )
         .bind(item.title.trim())
         .bind(item.description.as_deref().or(Some("")))
-        .bind(item.quadrant.as_deref().unwrap_or("urgent_important"))
+        .bind(item.priority.as_deref().unwrap_or("now"))
         .bind(user_id)
         .bind(item.due_date)
         .bind(source)
@@ -481,7 +481,7 @@ pub struct AcceptItem {
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub quadrant: Option<String>,
+    pub priority: Option<String>,
     #[serde(default)]
     pub due_date: Option<NaiveDate>,
     #[serde(default)]

@@ -1,7 +1,7 @@
 //! Integration routes — connect/status/disconnect Google (Phase 3).
 //!
 //! The callback verifies the signed state (it IS the identity — a browser
-//! redirect carries no bearer token) and answers with a tiny SPA-friendly
+//! redirect carries no bearer token) and answers with a tiny browser-friendly
 //! HTML page.
 
 use std::sync::Arc;

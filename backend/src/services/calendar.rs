@@ -126,7 +126,7 @@ impl CalendarService {
         Ok(deleted.rows_affected() > 0)
     }
 
-    /// Read the mirrored window (no network) — briefing + plan + SPA all read
+    /// Read the mirrored window (no network) — briefing + plan + frontend all read
     /// this cache; sync first for freshness.
     pub async fn mirrored_events(
         pool: &PgPool,

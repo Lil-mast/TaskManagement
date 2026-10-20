@@ -1,4 +1,4 @@
-//! Tasks CRUD — parity with the SPA's existing direct-Supabase behavior.
+//! Tasks CRUD — the matrix's data backbone (priority: now/schedule/delegate/drop).
 //!
 //! Notes:
 //! - `user_id` always derives from the verified token (never request bodies).
@@ -37,7 +37,7 @@ pub struct Task {
     pub user_id: String,
     pub title: String,
     pub description: Option<String>,
-    pub quadrant: String,
+    pub priority: String,
     pub status: String,
     pub due_date: Option<NaiveDate>,
     pub completed_at: Option<chrono::DateTime<Utc>>,
@@ -58,7 +58,7 @@ pub struct CreateTaskBody {
     pub title: String,
     #[serde(default)]
     pub description: Option<String>,
-    pub quadrant: String,
+    pub priority: String,
     #[serde(default)]
     pub due_date: Option<NaiveDate>,
     #[serde(default)]
@@ -74,7 +74,7 @@ pub struct UpdateTaskBody {
     #[serde(default)]
     pub description: Option<String>,
     #[serde(default)]
-    pub quadrant: Option<String>,
+    pub priority: Option<String>,
     #[serde(default)]
     pub status: Option<String>, // open|done|archived — done stamps completed_at
     #[serde(default)]
@@ -86,16 +86,11 @@ pub struct DeleteTaskQuery {
     pub purge: Option<bool>,
 }
 
-const KNOWN_QUADRANTS: [&str; 4] = [
-    "urgent_important",
-    "urgent_not_important",
-    "not_urgent_important",
-    "not_urgent_not_important",
-];
+const KNOWN_PRIORITIES: [&str; 4] = ["now", "schedule", "delegate", "drop"];
 const STATUSES: [&str; 3] = ["open", "done", "archived"];
 
-fn valid_quadrant(q: &str) -> bool {
-    KNOWN_QUADRANTS.contains(&q)
+fn valid_priority(q: &str) -> bool {
+    KNOWN_PRIORITIES.contains(&q)
 }
 fn valid_status(s: &str) -> bool {
     STATUSES.contains(&s)
@@ -117,7 +112,7 @@ async fn list_tasks(
     }
 
     let tasks = sqlx::query_as::<_, Task>(
-        "SELECT id, user_id, title, description, quadrant, status, due_date, completed_at,
+        "SELECT id, user_id, title, description, priority, status, due_date, completed_at,
                 source, meta, tags, created_at
          FROM tasks
          WHERE user_id = $1 AND status = $2
@@ -142,10 +137,10 @@ async fn create_task(
     if body.title.trim().is_empty() {
         return Err(AppError::BadRequest("title is required".into()));
     }
-    if !valid_quadrant(&body.quadrant) {
+    if !valid_priority(&body.priority) {
         return Err(AppError::BadRequest(format!(
-            "unknown quadrant {:?}",
-            body.quadrant
+            "unknown priority {:?}",
+            body.priority
         )));
     }
     let source = body.source.unwrap_or_else(|| "user".to_string());
@@ -154,14 +149,14 @@ async fn create_task(
     }
 
     let task = sqlx::query_as::<_, Task>(
-        "INSERT INTO tasks (title, description, quadrant, user_id, due_date, tags, source)
+        "INSERT INTO tasks (title, description, priority, user_id, due_date, tags, source)
          VALUES ($1, $2, $3, $4, $5, $6, $7)
-         RETURNING id, user_id, title, description, quadrant, status, due_date, completed_at,
+         RETURNING id, user_id, title, description, priority, status, due_date, completed_at,
                    source, meta, tags, created_at",
     )
     .bind(body.title.trim())
     .bind(body.description.as_deref().or(Some("")))
-    .bind(&body.quadrant)
+    .bind(&body.priority)
     .bind(&auth.0)
     .bind(body.due_date)
     .bind(body.tags.unwrap_or_default())
@@ -181,9 +176,9 @@ async fn update_task(
 ) -> AppResult<Json<Task>> {
     let pool = require_db(&state)?;
 
-    if let Some(q) = body.quadrant.as_deref() {
-        if !valid_quadrant(q) {
-            return Err(AppError::BadRequest(format!("unknown quadrant {q:?}")));
+    if let Some(q) = body.priority.as_deref() {
+        if !valid_priority(q) {
+            return Err(AppError::BadRequest(format!("unknown priority {q:?}")));
         }
     }
     if let Some(s) = body.status.as_deref() {
@@ -196,19 +191,19 @@ async fn update_task(
         "UPDATE tasks SET
             title        = COALESCE($1, title),
             description  = COALESCE($2, description),
-            quadrant     = COALESCE($3, quadrant),
+            priority     = COALESCE($3, priority),
             status       = COALESCE($4, status),
             due_date     = COALESCE($5, due_date),
             completed_at = CASE WHEN $4 = 'done'
                                 THEN COALESCE(completed_at, NOW())
                                 ELSE completed_at END
          WHERE id = $6 AND user_id = $7
-         RETURNING id, user_id, title, description, quadrant, status, due_date, completed_at,
+         RETURNING id, user_id, title, description, priority, status, due_date, completed_at,
                    source, meta, tags, created_at",
     )
     .bind(body.title.as_deref().map(str::trim).filter(|t| !t.is_empty()))
     .bind(body.description.as_deref().or(None))
-    .bind(body.quadrant.as_deref())
+    .bind(body.priority.as_deref())
     .bind(body.status.as_deref())
     .bind(body.due_date)
     .bind(id)
@@ -239,7 +234,7 @@ async fn delete_task(
         return Ok(Json(serde_json::json!({ "purged": res.rows_affected() })));
     }
 
-    // soft delete → archived (the SPA's trash)
+    // soft delete → archived
     let res = sqlx::query(
         "UPDATE tasks SET status = 'archived' WHERE id = $1 AND user_id = $2 AND status != 'archived'",
     )

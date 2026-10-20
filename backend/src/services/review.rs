@@ -18,8 +18,8 @@ use crate::core::error::{AppError, AppResult};
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
-pub struct QuadrantCount {
-    pub quadrant: String,
+pub struct PriorityCount {
+    pub priority: String,
     pub n: i64,
 }
 
@@ -50,7 +50,7 @@ pub struct LeetCodeStats {
 #[derive(Debug, Clone, Serialize)]
 pub struct TaskStats {
     pub completed: i64,
-    pub completed_by_quadrant: Vec<QuadrantCount>,
+    pub completed_by_priority: Vec<PriorityCount>,
     pub completed_prev_week: i64,
     pub created: i64,
     pub carried_over: i64,
@@ -122,18 +122,18 @@ pub async fn analytics(
         week_end,
     )
     .await?;
-    let by_quadrant: Vec<QuadrantCount> = sqlx::query_as(
-        "SELECT quadrant, COUNT(*)::bigint AS n FROM tasks
+    let by_priority: Vec<PriorityCount> = sqlx::query_as(
+        "SELECT priority, COUNT(*)::bigint AS n FROM tasks
          WHERE user_id = $1 AND status = 'done'
            AND completed_at >= $2 AND completed_at < $3
-         GROUP BY quadrant",
+         GROUP BY priority",
     )
     .bind(user_id)
     .bind(week_start)
     .bind(week_end)
     .fetch_all(pool)
     .await
-    .map_err(|e| AppError::Database(format!("review quadrants: {e}")))?;
+    .map_err(|e| AppError::Database(format!("review priorities: {e}")))?;
     let completed_prev = scalar(
         pool,
         "SELECT COUNT(*) FROM tasks
@@ -267,7 +267,7 @@ pub async fn analytics(
         week_end: week_end - Duration::days(1),
         tasks: TaskStats {
             completed,
-            completed_by_quadrant: by_quadrant,
+            completed_by_priority: by_priority,
             completed_prev_week: completed_prev,
             created,
             carried_over,

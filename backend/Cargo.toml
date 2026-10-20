@@ -1,5 +1,7 @@
 [package]
 name = "growth-copilot"
+# three bins exist (main + ops tools); make bare `cargo run` target the server
+default-run = "growth-copilot"
 version = "0.1.0"
 edition = "2021"
 description = "AI-for-everyday Growth Copilot — Axum backend (Phase 0)"

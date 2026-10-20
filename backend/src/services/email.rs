@@ -315,9 +315,9 @@ impl EmailService {
                             "reply", "fyi", "task", "ignore"] },
                         "summary": { "type": "string", "maxLength": 140 },
                         "task_title": { "type": "string", "maxLength": 120 },
-                        "task_quadrant": { "type": "string", "enum": [
-                            "urgent_important", "urgent_not_important",
-                            "not_urgent_important", "not_urgent_not_important"] }
+                        "task_priority": { "type": "string", "enum": [
+                            "now", "delegate",
+                            "schedule", "drop"] }
                     },
                     "required": ["gmail_msg_id", "category", "summary"]
                 }}
@@ -429,13 +429,13 @@ impl EmailService {
                 let meta =
                     serde_json::json!({ "gmail_msg_id": msg_id, "accepted_from": "email_triage" });
                 let task_id: uuid::Uuid = sqlx::query_scalar(
-                    "INSERT INTO tasks (title, description, quadrant, user_id,
+                    "INSERT INTO tasks (title, description, priority, user_id,
                                         source, meta)
                      VALUES ($1, $2, $3, $4, 'gmail', $5) RETURNING id",
                 )
                 .bind(&title)
                 .bind(&description)
-                .bind("urgent_important") // email tasks default to "now" — user can drag
+                .bind("now") // email tasks default to "now" — user can drag
                 .bind(user_id)
                 .bind(&meta)
                 .fetch_one(pool)
@@ -465,15 +465,15 @@ const TRIAGE_SYSTEM: &str = r#"You are the inbox triage engine of a developer's 
 Classify each unread email into exactly one category:
 - reply: the human should write a response soon
 - fyi: worth a skim, no action
-- task: something actionable that belongs in the Eisenhower matrix
+- task: something actionable that belongs in the priority model
 - ignore: noise (marketing, automated notices)
 
 Rules:
 1. One entry per email, keyed by `gmail_msg_id`. Never invent ids.
 2. `summary`: one line (≤140 chars), concrete, what it asks/wants.
 3. For `task` emails: also give `task_title` (verb-first, ≤120 chars)
-   and optionally `task_quadrant` (default urgent_important for real deadlines,
-   not_urgent_important for non-urgent follow-ups).
+   and optionally `task_priority` (default now for real deadlines,
+   schedule for non-urgent follow-ups).
 4. Honesty over completeness: if unsure, use `fyi`, not `task`.
 5. Answer with exactly ONE `classify_emails` tool call."#;
 
@@ -490,5 +490,5 @@ pub struct Classification {
     #[serde(default)]
     pub task_title: Option<String>,
     #[serde(default)]
-    pub task_quadrant: Option<String>,
+    pub task_priority: Option<String>,
 }

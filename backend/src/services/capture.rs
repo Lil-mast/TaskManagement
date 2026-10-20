@@ -15,7 +15,7 @@ pub struct ProposedTask {
     pub title: String,
     #[serde(default)]
     pub description: Option<String>,
-    pub quadrant: Quadrant,
+    pub priority: Priority,
     #[serde(default)]
     pub due_date: Option<chrono::NaiveDate>,
     #[serde(default)]
@@ -26,29 +26,29 @@ pub struct ProposedTask {
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "snake_case")]
-pub enum Quadrant {
-    UrgentImportant,
-    UrgentNotImportant,
-    NotUrgentImportant,
-    NotUrgentNotImportant,
+pub enum Priority {
+    Now,
+    Delegate,
+    Schedule,
+    Drop,
 }
 
-impl Quadrant {
+impl Priority {
     pub fn as_db_string(&self) -> &'static str {
         match self {
-            Quadrant::UrgentImportant => "urgent_important",
-            Quadrant::UrgentNotImportant => "urgent_not_important",
-            Quadrant::NotUrgentImportant => "not_urgent_important",
-            Quadrant::NotUrgentNotImportant => "not_urgent_not_important",
+            Priority::Now => "now",
+            Priority::Delegate => "delegate",
+            Priority::Schedule => "schedule",
+            Priority::Drop => "drop",
         }
     }
 
     pub fn from_db_string(s: &str) -> Option<Self> {
         Some(match s {
-            "urgent_important" => Quadrant::UrgentImportant,
-            "urgent_not_important" => Quadrant::UrgentNotImportant,
-            "not_urgent_important" => Quadrant::NotUrgentImportant,
-            "not_urgent_not_important" => Quadrant::NotUrgentNotImportant,
+            "now" => Priority::Now,
+            "delegate" => Priority::Delegate,
+            "schedule" => Priority::Schedule,
+            "drop" => Priority::Drop,
             _ => return None,
         })
     }
@@ -62,14 +62,17 @@ pub enum Confidence {
     Low,
 }
 
-const CAPTURE_SYSTEM: &str = r#"You are the capture & triage engine for an Eisenhower Matrix task app.
-Break the user's input into discrete tasks and place each in a quadrant.
+const CAPTURE_SYSTEM: &str = r#"You are the capture & triage engine of a Growth Copilot — an AI daily
+productivity & career-growth assistant. Turn the user's input into discrete
+tasks, each carrying one priority.
 
 Rules:
 1. One tool call per task — never merge two tasks into one.
-2. Quadrants describe two axes: urgent (needs action soon) and important (deep impact).
-   `urgent_important` = do now · `urgent_not_important` = delegate ·
-   `not_urgent_important` = schedule · `not_urgent_not_important` = consider dropping.
+2. Priorities (single axis of intent):
+   `now` = worth doing today; real deadline or immediate outcome ·
+   `schedule` = long-term value — needs a planned block (deep work, study,
+   interview prep) · `delegate` = time-critical but low impact — hand off,
+   automate, or minimize · `drop` = recognizable noise; propose deleting.
 3. Extract concrete dates when mentioned ("tomorrow", "Monday", "before Friday")
    as ISO YYYY-MM-DD using the provided current date; omit `due_date` otherwise.
 4. Titles start with a verb, short and concrete. Descriptions ≤ 1 sentence.
@@ -88,7 +91,7 @@ struct CreateTaskArgs {
     title: String,
     #[serde(default)]
     description: Option<String>,
-    quadrant: String,
+    priority: String,
     #[serde(default)]
     due_date: Option<String>,
     #[serde(default)]
@@ -111,18 +114,18 @@ impl CaptureService {
             json!({
                 "title":          { "type": "string", "maxLength": 120 },
                 "description":    { "type": "string" },
-                "quadrant":       { "type": "string", "enum": [
-                    "urgent_important", "urgent_not_important",
-                    "not_urgent_important", "not_urgent_not_important"] },
+                "priority":       { "type": "string", "enum": [
+                    "now", "delegate",
+                    "schedule", "drop"] },
                 "due_date":       { "type": "string", "format": "date" },
                 "tags":           { "type": "array", "items": { "type": "string" } },
                 "confidence":     { "type": "string", "enum": ["high", "medium", "low"] }
             }),
-            &["title", "quadrant"],
+            &["title", "priority"],
         );
         tool(
             "create_task",
-            "Create exactly one task in the user's Eisenhower matrix.",
+            "Create exactly one task in the user's priority model.",
             schema,
         )
     }
@@ -178,8 +181,8 @@ impl CaptureService {
             let args: CreateTaskArgs = serde_json::from_value(tu.input).map_err(|e| {
                 AppError::Upstream(format!("claude tool args invalid: {e}"))
             })?;
-            let quadrant = Quadrant::from_db_string(&args.quadrant).ok_or_else(|| {
-                AppError::Upstream(format!("unknown quadrant: {}", args.quadrant))
+            let priority = Priority::from_db_string(&args.priority).ok_or_else(|| {
+                AppError::Upstream(format!("unknown priority: {}", args.priority))
             })?;
             let due_date = match args.due_date.as_deref() {
                 Some(d) => Some(
@@ -192,7 +195,7 @@ impl CaptureService {
             tasks.push(ProposedTask {
                 title: args.title,
                 description: args.description,
-                quadrant,
+                priority,
                 due_date,
                 tags: args.tags.unwrap_or_default(),
                 confidence: args.confidence.as_deref().and_then(|c| match c {

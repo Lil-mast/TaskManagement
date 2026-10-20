@@ -28,13 +28,13 @@ CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- ============================================================================
--- 1. tasks — the matrix (the SPA's original base table, now owned canonically)
+-- 1. tasks — the copilot's task pool (priority: now | schedule | delegate | drop)
 -- ============================================================================
 CREATE TABLE IF NOT EXISTS tasks (
   id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   title       TEXT NOT NULL,
   description TEXT DEFAULT '',
-  quadrant    TEXT NOT NULL,
+  priority    TEXT NOT NULL,
   user_id     TEXT NOT NULL,
   created_at  TIMESTAMPTZ DEFAULT NOW(),
   status      TEXT NOT NULL DEFAULT 'open',
@@ -43,8 +43,8 @@ CREATE TABLE IF NOT EXISTS tasks (
   source      TEXT NOT NULL DEFAULT 'user',
   meta        JSONB NOT NULL DEFAULT '{}',
   tags        TEXT[] DEFAULT '{}',
-  CONSTRAINT tasks_quadrant_check CHECK (quadrant = ANY (ARRAY[
-      'urgent_important','urgent_not_important','not_urgent_important','not_urgent_not_important'])),
+  CONSTRAINT tasks_priority_check CHECK (priority = ANY (ARRAY[
+      'now','schedule','delegate','drop'])),
   CONSTRAINT tasks_status_check CHECK (status = ANY (ARRAY['open','done','archived']))
 );
 

@@ -1,126 +1,212 @@
-# Growth Copilot Backend (Rust · Axum)
+# Growth Copilot Backend (Rust · Axum · Postgres)
 
-> AI-for-everyday Growth Copilot — Phase 0 scaffold.
-> Design docs: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md) ·
-> [`../docs/FEATURES.md`](../docs/FEATURES.md) · [`../docs/RAG_PIPELINE.md`](../docs/RAG_PIPELINE.md) ·
-> phase tracking in [`../docs/phases/`](../docs/phases/).
+> AI daily productivity & career-growth copilot for mid-level engineers —
+> **all phases (0–6) built**. Design docs: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md),
+> [`../docs/RAG_PIPELINE.md`](../docs/RAG_PIPELINE.md), phase tracking in [`../docs/phases/`](../docs/phases/).
+> Deploy runbook: [`deploy/README.md`](deploy/README.md).
 
-## What works right now
-
-| Endpoint | Auth | Behavior |
-|---|---|---|
-| `GET /healthz` | none | Uptime probe: `{ok, version, database, anthropic, auth_mode, llm_tokens_available}` |
-| `POST /api/capture` | Bearer | Free text → **Claude tool use** → discrete, Eisenhower-classified tasks. Persists to Postgres when `DATABASE_URL` is set (`source: nl_capture`), otherwise proposal-only |
-| *(future)* `POST /api/capture/retriage` | — | Phase 1: one-click correction trains the classifier |
+**Stack:** Axum 0.8 · sqlx (runtime-checked) · Supabase Postgres (pgvector, RLS) ·
+Claude (single rate-limited choke point) · OpenAI-compatible embeddings ·
+Google Calendar + Gmail (Phase 3/4) · daily.dev connector.
 
 ## Quickstart
 
 ```bash
 cd backend
-cp .env.example .env            # then fill GROWTH_ANTHROPIC_API_KEY
-cargo run                       # → http://localhost:8000
-
-# every /api route accepts the literal token "dev" while
-# GROWTH_FIREBASE_PROJECT_ID is unset (dev mode, logged loudly)
+cp .env.example .env            # fill at least GROWTH_ANTHROPIC_API_KEY + GROWTH_DATABASE_URL
+cargo run                       # → http://localhost:8000  (three bins exist; server is default)
 
 curl -s localhost:8000/healthz
-
-curl -s -X POST localhost:8000/api/capture \
-  -H 'authorization: Bearer dev' \
-  -H 'content-type: application/json' \
-  -d '{"text": "review PRs tomorrow, plan my interview prep"}'
 ```
 
-Gradual wiring — everything degrades gracefully, nothing 500s on missing config:
+**Auth:** every `/api` route takes `Authorization: Bearer <token>`. Provider
+precedence: **Firebase Auth** (`GROWTH_FIREBASE_PROJECT_ID`) — the production
+identity; the SPA signs in with the Google OAuth popup through Firebase and
+sends the ID token, verified via JWKS (RS256, issuer-bound). **Supabase Auth**
+verification stays available but unused (`GROWTH_SUPABASE_URL` is the data
+plane only). Dev fallback: the literal token `"dev"` authenticates as
+`local_dev` — **only** when no identity provider is configured.
+`user_id` always comes from the verified token `sub`; request bodies never
+carry identity.
 
-| Setting | When absent | When present |
-|---|---|---|
-| `GROWTH_ANTHROPIC_API_KEY` | capture 503s ("not configured") | capture end-to-end via Claude |
-| `GROWTH_DATABASE_URL` | capture returns proposals only | tool results **insert into `tasks`** |
-| `GROWTH_FIREBASE_PROJECT_ID` | dev auth only ("dev" → `local_dev`) | real `Bearer <Firebase ID token>` verification (JWKS + RS256, cached 30 min) |
+**Schema:** on a fresh database run once
+`cargo run --bin apply_migration -- migrations/0007_consolidated_baseline.sql`
+(idempotent, complete). Files 0001–0006 are archived in `migrations/archive/`;
+`0008_drop_spa_legacy.sql` (drops SPA-era tables) was applied 2026-10-20.
 
-Schema migration (run once in the Supabase SQL editor):
-`backend/migrations/0001_phase0_schema.sql`
+## API contract
 
-## Rate limiting — how Claude is protected
+| Endpoint | Method | Auth | Behavior |
+|---|---|---|---|
+| `/healthz` | GET | none | `{ok, version, database, anthropic, auth_mode, llm_tokens_available}` |
+| `/api/capture` | POST | Bearer | Free text → Claude `create_task` tool → priority-classified task proposals (proposals; **never auto-inserts** into the matrix) → persists to `tasks` (`source: nl_capture`) |
+| `/api/tasks` | POST/GET | Bearer | Create (title, **priority** ∈ `now|schedule|delegate|drop`, description?, due_date?, tags?) / list with `?status=&since=&limit=` |
+| `/api/tasks/{id}` | PATCH/DELETE | Bearer | Edit (status transitions set `completed_at`) / soft-delete to trash (restore via PATCH) |
+| `/api/briefing` | GET | Bearer | Today's brief (compose-or-reuse, idempotent) |
+| `/api/briefing/refresh` | POST | Bearer | `{force:true}` recomputes |
+| `/api/briefing/accept` | POST | Bearer | Accept a brief's work item → task (human-in-the-loop) |
+| `/api/leetcode/patterns` | GET/POST | Bearer | Space-repetition list (SM-2-lite scheduling) |
+| `/api/leetcode/patterns/{id}` | PATCH | Bearer | Update pattern |
+| `/api/leetcode/attempt` | POST | Bearer | Log attempt; auto-schedules `next_review` |
+| `/api/leetcode/attempt/{id}` | PATCH | Bearer | Correct an attempt → reschedules the pattern |
+| `/api/knowledge/ingest` | POST | Bearer | Body `{items:[…]}` or empty → loads `data/books/*.json`; idempotent by sha256 of content |
+| `/api/knowledge/items` | GET | Bearer | List the corpus (for admin/visibility) |
+| `/api/knowledge/search` | POST | Bearer | Hybrid RRF retrieval (vector + `ts_rank`), quarantine-aware |
+| `/api/knowledge/feedback` | POST | Bearer | "This principle earned its keep" → `accepted_count++` |
+| `/api/knowledge/weights` | GET | Bearer | Live influence per principle (base vs effective weight, accepts, conflicts, surfaced-30d, quarantine) |
+| `/api/integrations` | GET | Bearer | Integration connection states |
+| `/api/integrations/dailydev/feeds` | POST | Bearer | Force-refresh the daily.dev cache (~15 feeds) |
+| `/api/integrations/dailydev/feeds` | GET | Bearer | Cached feeds (24h TTL) |
+| `/api/integrations/google/url` | GET | Bearer | Consent URL (consent includes calendar AND gmail scopes) |
+| `/api/integrations/google/callback` | GET | signed state | OAuth return — `state` carries `(provider, user_id)`, signed (AES-GCM/HKDF) |
+| `/api/integrations/google/disconnect` | POST | Bearer | Revoke + wipe stored token |
+| `/api/integrations/gmail/triage` | POST | Bearer | Fetch ≤15 unseen threads (metadata + 140-char snippet only) → Claude `classify_emails` → `email_triage` proposals (idempotent by msg id) |
+| `/api/email/triage` | GET | Bearer | List triage proposals (`state` filter) |
+| `/api/email/triage/{id}/act` | POST | Bearer | `{action:"done"}` or `{action:"convert_to_task"}` (adds task `source: gmail`) |
+| `/api/calendar/sync` | POST | Bearer | Horizon sync → `calendar_events` **mirror** (tasks rows never touched) |
+| `/api/calendar/events` | GET | Bearer | Mirror read (upcoming window) |
+| `/api/calendar/plan` | POST | Bearer | UTC-day planner: 09–18 focus windows ≥90 min; suggestions are proposals, ≤120 min |
+| `/api/profile` | GET/PUT | Bearer | Name, target interview date, focus areas (feeds prompt assembly) |
+| `/api/onboarding` | GET | Bearer | First-run checklist + next_steps |
+| `/api/onboarding/seed` | POST | Bearer | One sample task per priority class — idempotent, refuses non-empty task pool |
+| `/api/review/weekly` | GET | Bearer | `?week=YYYY-MM-DD` analytics: completion/priority-breakdown/LeetCode/inbox/principles + stored review |
+| `/api/review/weekly/run` | POST | Bearer | Compute + upsert week's review (Claude verdict when configured, headless otherwise) |
+| `/cron/briefing` | POST | cron secret | Morning brief for all active users (`x-cron-secret`) |
+| `/cron/weekly` | POST | cron secret | Weekly review (Saturday) for all actives |
+| `/cron/reweight` | POST | cron secret | RAG §7 re-weighting (`effective = base × (1 + ln(1+accepted)) / (1+conflicts)`, quarantine ≤0.1 — never deleted) |
 
-**All** Anthropic traffic goes through a single choke point:
-`src/services/anthropic.rs::AnthropicClient::chat`. No route/job builds an LLM
-request itself, so the guarantees below hold platform-wide:
+## Config (`.env`, all prefixed `GROWTH_`)
 
-| Control | Default | Behavior |
-|---|---|---|
-| Token bucket (`GROWTH_RATE_LIMIT_RPM`) | 20 req/min | Awaits (never errors) until a token frees |
-| Concurrency (…_CONCURRENCY) | 3 | Max in-flight LLM calls, `tokio::sync::Semaphore` |
-| 429/529 retry | `max_retries=4` | Honors `retry-after`; retries the identical payload |
-| 5xx / transport retry | exponential + jitter | 1s→2s→4s…, fails after exactly `max_retries` |
-| Other 4xx | fail-fast | The request is malformed — retrying cannot help |
-| Prompt guard | `…MAX_INPUT_CHARS=60000` | Rejected **locally**, zero network cost |
-| Output ceiling | `GROWTH_ANTHROPIC_MAX_TOKENS` | 4096 sent as `max_tokens` |
+Full list documented in `.env.example`. Highlights:
 
-Tool use (not prose parsing): Claude must call the `create_task` tool with a
-validated JSON schema; unparseable or unknown-enum responses become explicit
-`AppError::Upstream` — they never silently corrupt data.
+| Key | Notes |
+|---|---|
+| `GROWTH_DATABASE_URL` | Supabase Postgres (pooler). Graceful unset → DB features 503 |
+| `GROWTH_ANTHROPIC_API_KEY` / `_MODEL` | LLM — model default `claude-sonnet-5-5` |
+| `GROWTH_SUPABASE_URL` / `_JWT_SECRET` | OPTIONAL — Supabase is the data plane; its Auth is not used (Firebase is the provider) |
+| `GROWTH_FIREBASE_PROJECT_ID` | **the sign-in provider** (SPA Google OAuth popup → Firebase ID token → verified via JWKS) |
+| `GROWTH_EMBEDDINGS_API_KEY` / `_MODEL` / `_DIM` / `_BASE_URL` | default provider OpenAI `text-embedding-3-small` @1536-dim |
+| `GROWTH_GOOGLE_CLIENT_ID/_SECRET/_REDIRECT_URL` | one OAuth client, two consents (calendar + gmail) |
+| `GROWTH_TOKEN_ENC_KEY` | hex-32 AES-GCM master key (HKDF per-user keys for tokens at rest) |
+| `GROWTH_CRON_SECRET` | required in production for `/cron/*` |
+| `GROWTH_CORS_ORIGINS` | locked to the SPA origin (comma list) |
+| `GROWTH_BOOKS_DIR` | ingest source dir (default `data/books`) |
+
+## Guarantees
+
+- **Single LLM choke point** — every Claude call goes through
+  `services/anthropic.rs::chat`: token bucket (RPM), semaphore (in-flight cap),
+  retry-429-with-`retry-after`, exponential 5xx backoff, local prompt-size
+  guard. Burst behavior proven by test, never per-request buckets.
+- **Human-in-the-loop** — nothing auto-writes the matrix; capture/triage/plan
+  produce *proposals*; writes happen through explicit act/accept calls.
+- **Token hygiene** — mirrored calendar/gmail events and snippets only
+  (email body never fetched in v1); OAuth tokens encrypted at rest (AES-256-GCM,
+  per-user HKDF); disconnect = revoke + wipe token (triage rows kept).
+- **RLS everywhere per-user** — `user_id` policies on all 13 per-user tables;
+  app-level queries always bind the verified uid. All work stays SQL via
+  sqlx — no raw string interpolation of user data.
 
 ## Project layout
 
 ```
 backend/
-├── Cargo.toml                     # deps + profile.release (thin LTO)
-├── .env.example                   # every variable, documented
-├── migrations/0001_phase0_schema.sql
-├── tests/anthropic.rs             # 6 integration tests (wiremock, no network)
+├── Cargo.toml                    # default-run = growth-copilot (3 bins)
+├── .env.example                  # every variable, documented
+├── Dockerfile                    # multi-stage → distroless cc
+├── render.yaml                   # Render blueprint (Docker runtime, healthz)
+├── deploy/README.md              # fly deploy, secrets, crontab
+├── migrations/
+│   ├── 0007_consolidated_baseline.sql   # ← canonical (idempotent, complete)
+│   ├── 0008_drop_spa_legacy.sql         # destructive, applied 2026-10-20
+│   ├── archive/0001–0006                # superseded incrementals
+│   └── ...
+├── data/books/                   # digested corpus JSONs + user PDFs (PDFs gitignored)
+├── tests/                        # wiremock contracts (no real network)
+│   ├── anthropic.rs              # bucket, retries, tool parse, burst singleton
+│   ├── google.rs                 # consent/exchange/refresh/revoke contracts
+│   ├── gmail.rs                  # metadata-only triage pipeline
+│   ├── embeddings.rs             # provider contract
+│   └── golden_set.rs             # CI-gated RAG relevance evals (skips w/o secrets)
 └── src/
-    ├── lib.rs                     # AppState, build_state, build_app
-    ├── main.rs                    # thin async runner
+    ├── lib.rs                    # AppState, build_state, build_app (RAG snapshot)
+    ├── main.rs                   # thin async runner
     ├── core/
-    │   ├── config.rs              # figment/env config + sentinel PORT fallback
-    │   ├── auth.rs                # Bearer → AuthUser extractor
-    │   └── error.rs               # AppError → typed HTTP responses
+    │   ├── config.rs             # figment/env config, PORT fallback for hosts
+    │   ├── auth.rs               # Supabase→Firebase→dev Bearer extraction
+    │   └── error.rs              # AppError → typed HTTP (some fields)
     ├── routes/
-    │   ├── mod.rs                 # router assembly
-    │   ├── health.rs              # /healthz
-    │   └── capture.rs             # /api/capture + optional DB persistence
-    └── services/
-        ├── anthropic.rs           # ← single LLM path: bucket, slots, retries, tool parsing
-        └── capture.rs             # prompt, tool schema, structured-task assembly
+    │   ├── mod.rs                 # router assembly, every route nest
+    │   ├── capture.rs            # NL capture + mail triage retriever hookup
+    │   ├── tasks.rs              # matrix CRUD
+    │   ├── briefing.rs           # morning brief routes
+    │   ├── leetcode.rs           # patterns + attempts + SM-2-lite
+    │   ├── knowledge.rs          # ingest/items/search/feedback/weights
+    │   ├── integrations.rs       # daily.dev + google/gmail OAuth
+    │   ├── calendar.rs           # sync/plan + mirror read
+    │   ├── email.rs              # triage list/act
+    │   ├── onboarding.rs         # profile + first-run flow
+    │   ├── review.rs             # weekly analytics + run
+    │   └── health.rs             # /healthz snapshot
+    ├── services/
+    │   ├── anthropic.rs          # ← single LLM path
+    │   ├── capture.rs            # prompt + tool schema
+    │   ├── dailydev.rs           # shape-tolerant connector + 24h cache
+    │   ├── briefing.rs           # grounding + compose-or-reuse + accept
+    │   ├── embeddings.rs         # OpenAI-compatible, swappable model/dim
+    │   ├── rag.rs                # ingest (idempotent), hybrid RRF RAG, re-weight
+    │   ├── leetcode.rs           # SM-2-lite (pure scheduler)
+    │   ├── google.rs             # OAuth — consent/exchange/refresh/revoke
+    │   ├── calendar.rs            # mirror + sync + planner config
+    │   ├── planner.rs            # pure gap/fit math
+    │   ├── email.rs              # gmail fetch/classify/upsert/act pipeline
+    │   ├── review.rs             # weekly analytics + verdict + upsert
+    │   └── crypto.rs             # AES-GCM tokens + signed state
+    └── jobs/
+        ├── morning_brief.rs      # /cron/briefing (CronSecret guard pub(crate))
+        └── weekly_review.rs      # /cron/weekly + /cron/reweight
 ```
 
 ## Testing
 
 ```bash
-cargo test
+cargo test                      # 40 tests, 0 warnings, no network (wiremock)
 ```
 
-6/6 pass (wiremock spins a local mock server — the suite never touches the network):
+Highlights:
+- `anthropic.rs` — bucket drain, retry-after 429, persistent-5xx exhaustion,
+  tool parse, local guard, request shape, **burst shares one singleton bucket**
+- `google.rs` — consent/exchange/refresh (scope-merging)/revoke via wiremock
+- `gmail.rs` — fetch → one `classify_emails` call → idempotent upserts
+- `embeddings.rs` — API contract; `golden_set.rs` — CI-gated top-3 relevance
+  evals (self-skip without `GROWTH_TEST_DATABASE_URL` + `GROWTH_TEST_EMBEDDINGS_KEY`)
+- unit tests for pure logic: planner gap math, SM-2 scheduler, week-start math,
+  crypto round-trips
 
-| Test | Proves |
-|---|---|
-| `bucket_starts_full_and_drains` | RPM bucket blocks when drained (4th call waits) |
-| `retries_on_429_with_retry_after_then_succeeds` | Rate-limit retry path + `retry-after` honored |
-| `exhausts_retries_on_persistent_5xx` | Exactly `max_retries` attempts, then surfaced error |
-| `tool_use_blocks_are_parsed` | Claude tool-use blocks → typed structs |
-| `oversized_prompts_are_rejected_locally` | Zero network calls for oversized prompts |
-| `request_body_never_omits_model_and_max_tokens` | Request shape contract |
+## Deliberate doc deviations (recorded)
 
-## Deviations from the docs (deliberate)
+1. **`jsonwebtoken` + JWKS** instead of `firebase-admin`/supabase-admin SDKs —
+   same guarantees, no heavyweight dependency.
+2. **Runtime-checked sqlx** (`query`/`query_as`) — no build-time DATABASE_URL
+   requirement; switching to macros optional later.
+3. **Phase 5 weight formula** — `base × (1 + ln(1+accepted)) / (1+conflicts)`
+   (raw §7 collapses fresh corpus to zero on first run); quarantine is an
+   explicit underperformer rule (≥10 surfaces/30d, 0 accepts → 0.1).
+4. **Schema at-rest delta** — pre-migration legacy `user_id` default
+   (`local_dev`) & original SPA base tasks remain grandfathered in live DB;
+   baseline (fresh installs) has neither issue.
 
-1. **Firebase verification via `jsonwebtoken` + JWKS instead of the
-   `firebase-admin` crate.** Same guarantees (RS256, `kid` lookup, `iss`/`aud`
-   checks, TTL-cached JWKS) with no heavyweight admin SDK dependency. Documented
-   here so nobody expects a `firebase-admin` entry in `Cargo.toml`.
-2. **Runtime-checked SQL (`sqlx::query`) rather than `query_as!` macros.**
-   Compile-time validation needs `DATABASE_URL` (or `cargo sqlx prepare` offline
-   metadata) at build time; Phase 0 doesn't assume one. Switching the macros on
-   is a Phase 1 task once Supabase creds live on the build host.
-3. **`/api/capture` early-lands in Phase 0** (Phase docs planned it for Phase 1)
-   because it is the fastest way to verify the rate-limited Claude integration
-   end-to-end. Phase 1 completes it with persistence on by default + the SPA rewire.
+## Deploy
 
-## Next steps (Phase 1 — status: backend built, see `../docs/phases/PHASE_1.md`)
+See [`deploy/README.md`](deploy/README.md) — **Render** Blueprint
+(`render.yaml`, Docker runtime), secrets → Render environment (never
+committed), `/cron/*` via Render Cron Job or GitHub Actions, `/healthz`
+wired to Render monitoring.
 
-- ✅ `GET/POST/PATCH/DELETE /api/tasks` — shipped (soft-delete = trash)
-- ✅ daily.dev connector + 24h cache — shipped
-- ✅ morning brief: `GET /api/briefing` (+ refresh / accept / cron) — shipped
-- ⬜ flip `sqlx` to compile-time-checked macros (needs DATABASE_URL on build host)
-- ⬜ run migration 0001 against live Supabase; flip SPA to backend source of truth
+## Not yet switched on (user-side)
+
+- `GROWTH_EMBEDDINGS_API_KEY` → RAG ingest/search/reweight live (corpus JSONs ready in `data/books/`)
+- Google OAuth client + secrets → calendar/gmail consents
+- `GROWTH_CRON_SECRET` → scheduled jobs
+- `render` blueprint deploy + cron rows
+- SPA (frontend) handover to attach Bearer Supabase tokens (checklist in `../docs/phases/PHASE_6.md`)

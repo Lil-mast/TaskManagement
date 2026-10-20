@@ -1,12 +1,13 @@
-//! Verified-identity extraction for `/api` routes — Phase 6 consolidation.
+//! Verified-identity extraction for `/api` routes.
 //!
 //! Provider precedence on every Bearer token:
-//!   1. **Supabase Auth** (`GROWTH_SUPABASE_URL` set) — the go-forward identity.
-//!      Asymmetric RS256 verified against the project JWKS; legacy projects on
-//!      the shared secret also accept HS256 when `GROWTH_SUPABASE_JWT_SECRET`
-//!      is set.
-//!   2. **Firebase** (`GROWTH_FIREBASE_PROJECT_ID` set) — legacy window, so
-//!      tokens issued before the migration keep working.
+//!   1. **Firebase Auth** (`GROWTH_FIREBASE_PROJECT_ID` set) — THE production
+//!      identity (user-directed 2026-10-20): the frontend signs in with the
+//!      Google OAuth popup through Firebase and gives us its ID token; we verify it
+//!      RS256/JWKS against `https://securetoken.google.com/<project>`.
+//!   2. **Supabase Auth** (`GROWTH_SUPABASE_URL` set) — optional alternate
+//!      source (asymmetric JWKS; legacy HS256 only with the shared secret).
+//!      Supabase is the data plane (Postgres + RLS); its Auth is NOT used.
 //!   3. **Dev fallback** — literal token `"dev"` → `local_dev`; ONLY accepted
 //!      when no identity provider is configured. Never in production.
 //!
@@ -214,21 +215,6 @@ impl FromRequestParts<Arc<crate::AppState>> for AuthUser {
             .map(str::trim)
             .ok_or_else(|| AppError::Unauthorized("missing bearer token".into()))?;
 
-        if config.supabase_configured() {
-            let origin = config.supabase_origin().unwrap_or_default();
-            match verify_supabase_token(bearer, origin, config.supabase_jwt_secret.as_deref()).await
-            {
-                Ok(uid) => {
-                    tracing::trace!(user_id = %uid, "authenticated via supabase");
-                    return Ok(AuthUser(uid));
-                }
-                Err(e) if !config.firebase_configured() => return Err(e),
-                Err(_) => {
-                    // migration window: fall through to Firebase before failing
-                }
-            }
-        }
-
         if config.firebase_configured() {
             let project_id = config
                 .firebase_project_id
@@ -240,9 +226,11 @@ impl FromRequestParts<Arc<crate::AppState>> for AuthUser {
         }
 
         if config.supabase_configured() {
-            return Err(AppError::Unauthorized(
-                "token rejected by the configured identity provider".into(),
-            ));
+            let origin = config.supabase_origin().unwrap_or_default();
+            let uid =
+                verify_supabase_token(bearer, origin, config.supabase_jwt_secret.as_deref()).await?;
+            tracing::trace!(user_id = %uid, "authenticated via supabase");
+            return Ok(AuthUser(uid));
         }
 
         if bearer == "dev" {

@@ -130,11 +130,11 @@ async fn plan(
         .collect();
     let cfg = planner::PlanConfig::default();
 
-    // unscheduled (no due_date) open Schedule-quadrant tasks, oldest first
+    // unscheduled (no due_date) open Schedule-priority tasks, oldest first
     let tasks: Vec<(uuid::Uuid, String)> = sqlx::query_as(
         "SELECT id, title FROM tasks
          WHERE user_id = $1 AND status = 'open'
-           AND quadrant = 'not_urgent_important' AND due_date IS NULL
+           AND priority = 'not_urgent_important' AND due_date IS NULL
          ORDER BY created_at ASC
          LIMIT 5",
     )

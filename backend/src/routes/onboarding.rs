@@ -5,7 +5,7 @@
 //!   focus areas; feeds prompt assembly (briefing grounding §2).
 //! - `GET /api/onboarding` — checklist state: tasks seeded? daily.dev cached?
 //!   Google connected? knowledge ingested? Anthropic-backed features on?
-//! - `POST /api/onboarding/seed` — one idempotent sample task per quadrant,
+//! - `POST /api/onboarding/seed` — one idempotent sample task per priority,
 //!   tagged `meta:{"sample":true}`, only when the matrix is empty.
 
 use std::sync::Arc;
@@ -179,7 +179,7 @@ async fn onboarding_status(
         next_steps: {
             let mut v = Vec::new();
             if tasks_count == 0 {
-                v.push("POST /api/onboarding/seed — fill the four quadrants with sample tasks".into());
+                v.push("POST /api/onboarding/seed — fill the four priorities with sample tasks".into());
             }
             if code_counts.1 == 0 {
                 v.push("POST /api/integrations/dailydev/feeds — cache the first read".into());
@@ -199,7 +199,7 @@ async fn onboarding_status(
     Ok(Json(status))
 }
 
-/// Four sample tasks (one per quadrant), only when the user has none.
+/// Four sample tasks (one per priority), only when the user has none.
 /// Idempotent by design: refuses to run over a seeded matrix, so re-firing is
 /// a no-op rather than a duplicate generator.
 #[derive(Debug, Serialize)]
@@ -210,22 +210,22 @@ struct SeedResult {
 
 const SAMPLES: [(&str, &str, &str); 4] = [
     (
-        "urgent_important",
+        "now",
         "Finish the quarterly deliverable draft",
-        "Crises & deadlines — life in Quadrant 1",
+        "Crises & deadlines — life in Priority 1",
     ),
     (
-        "not_urgent_important",
+        "schedule",
         "Book 3 practice interviews with a peer",
-        "Growth & principles — Quadrant 2, the winning quadrant",
+        "Growth & principles — Priority 2, the winning priority",
     ),
     (
-        "urgent_not_important",
+        "delegate",
         "Reply to meeting-reschedule thread",
         "Interruptions — delegate or quash",
     ),
     (
-        "not_urgent_not_important",
+        "drop",
         "Scroll past the third weather meme",
         "Trivial — the matrix exists to name these",
     ),
@@ -247,15 +247,15 @@ async fn seed(
     }
 
     let mut inserted = 0;
-    for (quadrant, title, description) in SAMPLES {
+    for (priority, title, description) in SAMPLES {
         let res = sqlx::query(
-            "INSERT INTO tasks (user_id, title, description, quadrant, source, meta, tags)
+            "INSERT INTO tasks (user_id, title, description, priority, source, meta, tags)
              VALUES ($1, $2, $3, $4, 'user', '{\"sample\": true}', '{\"onboarding\"}')",
         )
         .bind(&auth.0)
         .bind(title)
         .bind(description)
-        .bind(quadrant)
+        .bind(priority)
         .execute(pool)
         .await
         .map_err(|e| AppError::Database(format!("seed insert: {e}")))?;

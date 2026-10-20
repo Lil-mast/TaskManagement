@@ -1,0 +1,56 @@
+# Render Blueprint — Growth Copilot backend (Docker runtime).
+#
+# Deploy: push this repo, then in Render dashboard →
+#   New → Blueprint → pick the repo → Render reads this file.
+#
+# SECRETS: every `sync: false` var must be set in the Render dashboard
+# (Environment tab) or on first deploy Render prompts for each value.
+# Nothing secret is ever committed or baked into the image.
+
+services:
+  - type: web                    # long-running HTTP server ( Axum )
+    name: growth-copilot
+    runtime: docker              # multi-stage Dockerfile → distroless
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    region: oregon               # pick closest to your Supabase region
+    plan: starter
+    numInstances: 1
+    healthCheckPath: /healthz    # wired into Render monitoring
+    autoDeploy: true             # deploy on push to the tracked branch
+    envVars:
+      # --- data plane (Supabase Postgres) ---
+      - key: GROWTH_DATABASE_URL
+        sync: false
+      # --- identity (Firebase — the sign-in provider) ---
+      - key: GROWTH_FIREBASE_PROJECT_ID
+        sync: false
+      # --- LLM ---
+      - key: GROWTH_ANTHROPIC_API_KEY
+        sync: false
+      # - key: GROWTH_ANTHROPIC_MODEL
+      #   value: claude-sonnet-5-5
+      - key: GROWTH_RATE_LIMIT_RPM
+        value: "20"
+      - key: GROWTH_RATE_LIMIT_CONCURRENCY
+        value: "3"
+      # --- embeddings (RAG) ---
+      - key: GROWTH_EMBEDDINGS_API_KEY
+        sync: false
+      # --- Google OAuth (calendar + gmail consents) ---
+      - key: GROWTH_GOOGLE_CLIENT_ID
+        sync: false
+      - key: GROWTH_GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GROWTH_GOOGLE_REDIRECT_URL
+        value: https://growth-copilot.onrender.com/api/integrations/google/callback
+      # --- tokens at rest ---
+      - key: GROWTH_TOKEN_ENC_KEY
+        sync: false
+      # --- cron guard ---
+      - key: GROWTH_CRON_SECRET
+        sync: false
+      # --- CORS: your SPA origin ---
+      - key: GROWTH_CORS_ORIGINS
+        value: https://<your-spa.pages.dev>
+    # No disks needed — stateless; everything persists in Supabase.
