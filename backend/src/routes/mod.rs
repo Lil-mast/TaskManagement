@@ -6,6 +6,7 @@ pub mod health;
 pub mod integrations;
 pub mod knowledge;
 pub mod leetcode;
+pub mod onboarding;
 pub mod review;
 pub mod tasks;
 
@@ -26,6 +27,7 @@ pub fn router() -> axum::Router<std::sync::Arc<crate::AppState>> {
         .nest("/api/calendar", calendar::routes())
         .nest("/api/email", email::routes())
         .nest("/api/review", review::routes())
+        .nest("/api", onboarding::routes())
         .merge(crate::jobs::morning_brief::routes())
         .merge(crate::jobs::weekly_review::routes())
 }

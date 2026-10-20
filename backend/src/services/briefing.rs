@@ -174,7 +174,35 @@ async fn ground_inbox_pulse(pool: &PgPool, user_id: &str) -> AppResult<Vec<Inbox
     Ok(rows)
 }
 
-async fn ground_calendar(pool: &PgPool, user_id: &str) -> AppResult<Vec<CalendarGround>> {    let rows: Vec<CalendarGround> = sqlx::query_as(
+/// Onboarding profile — shapes tone + immediacy of every composed brief.
+/// Absent profile → `{}` (system prompt handles the neutral case).
+async fn ground_profile(pool: &PgPool, user_id: &str) -> AppResult<serde_json::Value> {
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        name: Option<String>,
+        target_interview_date: Option<chrono::NaiveDate>,
+        focus_areas: Vec<String>,
+    }
+    let row = sqlx::query_as::<_, Row>(
+        "SELECT name, target_interview_date, focus_areas
+         FROM user_profiles WHERE user_id = $1",
+    )
+    .bind(user_id)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| AppError::Database(format!("profile grounding: {e}")))?;
+    Ok(match row {
+        None => serde_json::json!({}),
+        Some(r) => serde_json::json!({
+            "name": r.name,
+            "target_interview_date": r.target_interview_date,
+            "focus_areas": r.focus_areas,
+        }),
+    })
+}
+
+async fn ground_calendar(pool: &PgPool, user_id: &str) -> AppResult<Vec<CalendarGround>> {
+    let rows: Vec<CalendarGround> = sqlx::query_as(
         "SELECT COALESCE(NULLIF(title, ''), '(busy)') AS title, start_at, end_at
          FROM calendar_events
          WHERE user_id = $1 AND busy AND start_at >= NOW()
@@ -338,7 +366,9 @@ impl BriefingService {
         };
 
         let ground_plus_watch = format!(
-            "TASKS: {}\n\nFEED: {}\n\nLEETCODE_DUE: {}\n\nCALENDAR (next 7 days, meeting load the priorities must account for): {}\n\nINBOX_PULSE (email_triage state — reply count must match this): {}",
+            "PROFILE (let this shape tone and emphasis; never invent profile facts): {}\n\nTASKS: {}\n\nFEED: {}\n\nLEETCODE_DUE: {}\n\nCALENDAR (next 7 days, meeting load the priorities must account for): {}\n\nINBOX_PULSE (email_triage state — reply count must match this): {}",
+            serde_json::to_string(&ground_profile(pool, user_id).await.unwrap_or_default())
+                .unwrap_or_default(),
             ground_tasks(&tasks),
             serde_json::to_string(&serde_json::json!({
                 "foryou": feeds.for_you.iter().take(8).collect::<Vec<_>>(),

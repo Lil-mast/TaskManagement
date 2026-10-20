@@ -191,12 +191,20 @@ impl AnthropicClient {
     /// - retries 429/529 with `Retry-After` (fallback: fixed per code)
     /// - retries 5xx / transport errors with exponential + jitter
     /// - other 4xx fails immediately (`AppError::Upstream`)
+    #[tracing::instrument(
+        name = "anthropic.chat",
+        skip_all,
+        fields(model = %self.settings.model, input_chars)
+    )]
     pub async fn chat(
         &self,
         messages: Vec<Message>,
         system: Option<String>,
         tools: Vec<ToolDefinition>,
     ) -> AppResult<MessagesResponse> {
+        let input_chars: usize = messages.iter().map(|m| m.content.len()).sum::<usize>()
+            + system.as_deref().map(str::len).unwrap_or(0);
+        tracing::Span::current().record("input_chars", input_chars);
         if !self.is_configured() {
             return Err(AppError::Unavailable(
                 "GROWTH_ANTHROPIC_API_KEY not configured".into(),

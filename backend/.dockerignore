@@ -1,0 +1,7 @@
+# Never bake secrets or dev noise into any image layer
+.env
+.env.*
+target/
+Makefile
+*.md
+docker-compose*.yml

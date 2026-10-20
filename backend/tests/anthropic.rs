@@ -204,3 +204,55 @@ async fn request_body_never_omits_model_and_max_tokens() {
     assert_eq!(body["max_tokens"], 1024);
     assert_eq!(body["messages"][0]["role"], "user");
 }
+
+// Phase 6 acceptance: a burst of concurrent calls drains the SINGLETON bucket,
+// never a per-request bucket. rpm=3 means at most 3 immediate deliveries;
+// the 4th must wait ~20 s for refill (verified absent from the server log).
+#[tokio::test]
+async fn burst_shares_one_singleton_bucket() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/messages"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "msg_b", "stop_reason": "end_turn",
+            "content": [{"type": "text", "text": "ok"}],
+            "usage": { "input_tokens": 1, "output_tokens": 1 }
+        })))
+        .mount(&server)
+        .await;
+
+    let settings = AnthropicSettings {
+        requests_per_minute: 3,
+        max_concurrency: 100, // concurrency must NOT be the limiter here
+        ..test_settings(server.uri())
+    };
+    // ONE shared client — the AppState shape in production (Arc'd)
+    let client = std::sync::Arc::new(AnthropicClient::new(settings));
+
+    let mut handles = Vec::new();
+    for i in 0..4 {
+        let c = client.clone();
+        handles.push(tokio::spawn(async move {
+            c.chat(
+                vec![Message { role: Role::User, content: format!("call {i}") }],
+                None,
+                vec![],
+            )
+            .await
+        }));
+    }
+    // make sure all 4 were racing simultaneously
+    for _ in &handles {
+        tokio::time::sleep(Duration::from_millis(10)).await;
+    }
+
+    // after 1 s: exactly rpm requests landed; the 4th still waits for refill
+    tokio::time::sleep(Duration::from_millis(1_100)).await;
+    let received = server.received_requests().await.expect("requests");
+    assert_eq!(
+        received.len(),
+        3,
+        "burst must be throttled by the shared bucket, got {}",
+        received.len()
+    );
+}

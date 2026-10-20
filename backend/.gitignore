@@ -1,1 +1,5 @@
 .env
+
+# book PDFs — user-supplied copyrighted works, never commit/redistribute
+data/books/*.pdf
+money.pdf

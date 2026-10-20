@@ -1,0 +1,35 @@
+# Fly.io runtime manifest — deploy after `fly launch --dockerfile backend/Dockerfile`.
+#
+# Secrets (never in this file, never in git):
+#   fly secrets set GROWTH_DATABASE_URL=... GROWTH_TOKEN_ENC_KEY=... \
+#       GROWTH_GOOGLE_CLIENT_ID=... GROWTH_GOOGLE_CLIENT_SECRET=... \
+#       GROWTH_ANTHROPIC_API_KEY=... GROWTH_CRON_SECRET=... \
+#       GROWTH_SUPABASE_URL=... GROWTH_EMBEDDINGS_API_KEY=...
+# The Frontend SPA origin must be listed in GROWTH_CORS_ORIGINS.
+
+app = "growth-copilot"          # rename to whatever `fly apps create` assigns
+primary_region = "lhr"          # eu-west-2 London — same region as the Supabase project
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  GROWTH_CORS_ORIGINS = "https://<your-spa.pages.dev>"
+
+[http_service]
+  internal_port = 8000
+  force_https = true
+  auto_stop_machines = "suspend"   # scale-to-zero friendly
+  auto_start_machines = true
+  min_machines_running = 1         # keep one warm so the morning brief cron never cold-starts
+
+  [http_service.concurrency]
+    type = "requests"
+    soft_limit = 40
+    hard_limit = 80
+
+[[http_service.checks]]
+  interval = "30s"
+  timeout = "5s"
+  grace_period = "10s"
+  path = "/healthz"                # wired into host monitoring

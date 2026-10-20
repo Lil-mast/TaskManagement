@@ -77,12 +77,14 @@ impl RagService {
 
     /// Ingest books items (idempotent). Item identity is (user_id, book, idea)
     /// — re-running with the same JSON is a no-op; new ideas get embedded.
+    #[tracing::instrument(name = "rag.ingest", skip_all, fields(user_id, count = items.len()))]
     pub async fn ingest(
         &self,
         pool: &PgPool,
         user_id: &str,
         items: &[KnowledgeIngestItem],
     ) -> AppResult<IngestSummary> {
+        tracing::Span::current().record("user_id", user_id);
         if items.is_empty() {
             return Err(AppError::BadRequest(
                 "no knowledge items provided (body items or data/books/*.json)".into(),
@@ -234,6 +236,7 @@ impl RagService {
     /// they stay in the corpus, they just stop showing up (PHASE_5 §3).
     /// `source` (brief|capture|email) is logged as retrieval provenance for
     /// the weekly re-weighting; anything else is logged nothing.
+    #[tracing::instrument(name = "rag.retrieve", skip_all, fields(user_id, source, k))]
     pub async fn retrieve(
         &self,
         pool: &PgPool,
@@ -242,6 +245,10 @@ impl RagService {
         k: usize,
         source: &str,
     ) -> AppResult<Vec<KnowledgeHit>> {
+        tracing::Span::current()
+            .record("user_id", user_id)
+            .record("source", source)
+            .record("k", k);
         let query = query.trim();
         if query.is_empty() || !self.is_ready() {
             return Ok(Vec::new());

@@ -31,6 +31,14 @@ pub struct Config {
     pub max_retries: u32,
     #[serde(default)]
     pub firebase_project_id: Option<String>,
+    /// Supabase project URL (https://<ref>.supabase.co) — Phase 6 auth
+    /// consolidation target. JWTs verified against the project's JWKS.
+    #[serde(default)]
+    pub supabase_url: Option<String>,
+    /// Legacy HS256 JWT secret (only for projects still on symmetric signing
+    /// keys); asymmetric JWKS verification is preferred and needs nothing here.
+    #[serde(default)]
+    pub supabase_jwt_secret: Option<String>,
     /// daily.dev Public API personal access token
     #[serde(default)]
     pub daily_dev_token: Option<String>,
@@ -127,6 +135,8 @@ impl Default for Config {
             rate_limit_concurrency: 3,
             max_retries: 4,
             firebase_project_id: None,
+            supabase_url: None,
+            supabase_jwt_secret: None,
             daily_dev_token: None,
             cron_secret: None,
             embeddings_api_key: None,
@@ -179,6 +189,21 @@ impl Config {
             .as_deref()
             .map(|p| !p.is_empty())
             .unwrap_or(false)
+    }
+
+    pub fn supabase_configured(&self) -> bool {
+        self.supabase_url
+            .as_deref()
+            .map(|p| p.trim().trim_end_matches('/').len() > 8)
+            .unwrap_or(false)
+    }
+
+    /// Normalized origin (no trailing slash).
+    pub fn supabase_origin(&self) -> Option<&str> {
+        self.supabase_url
+            .as_deref()
+            .map(|p| p.trim().trim_end_matches('/'))
+            .filter(|p| p.len() > 8)
     }
 
     pub fn google_configured(&self) -> bool {

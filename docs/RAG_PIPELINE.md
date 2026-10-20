@@ -87,7 +87,7 @@ embed. Rig's unified embedding interface makes the provider a config choice:
 
 | Option | Verdict |
 |---|---|
-| **OpenAI `text-embedding-3-small`** | ✅ default: 1536-dim, cheap, universally supported |
+| **AgentRouter → OpenAI `text-embedding-3-small`** | ✅ default: OpenAI-compatible relay (`agentrouter.org/v1`, key `sk-ar-…`), 1536-dim, one billing pool with the Anthropic traffic |
 | Voyage AI (`voyage-3`) | Strong quality, Anthropic's recommended embedding partner |
 | Local model later | Zero API cost; swap config → re-embed once |
 

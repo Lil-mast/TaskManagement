@@ -1,6 +1,7 @@
 //! Embeddings client — the RAG layer's only network dependency.
 //!
-//! Anthropic does not serve embeddings; the default provider is OpenAI's
+//! Anthropic does not serve embeddings; the default provider is AgentRouter
+//! (`agentrouter.org`, an OpenAI-compatible relay) serving OpenAI's
 //! `text-embedding-3-small` (1536-dim). Provider/model/dim are config; the
 //! same model must generate document chunks **and** queries (a mismatch
 //! invalidates retrieval — RAG_PIPELINE §5).
@@ -8,7 +9,7 @@
 use crate::core::error::{AppError, AppResult};
 use serde::{Deserialize, Serialize};
 
-pub const DEFAULT_EMBEDDINGS_BASE_URL: &str = "https://api.openai.com/v1";
+pub const DEFAULT_EMBEDDINGS_BASE_URL: &str = "https://agentrouter.org/v1";
 pub const DEFAULT_EMBEDDINGS_MODEL: &str = "text-embedding-3-small";
 
 #[derive(Debug, Clone)]
