@@ -79,6 +79,11 @@
   color: var(--ink);
 }
 
+.btn--danger {
+  background: var(--crimson);
+  color: var(--cream);
+}
+
 .btn:disabled {
   cursor: not-allowed;
   opacity: 0.45;
@@ -96,6 +101,39 @@
   .btn--ghost:hover {
     background: var(--ink);
     color: var(--cream);
+  }
+
+  .btn--danger:hover {
+    background: var(--crimson-deep);
+  }
+}
+
+.link-button {
+  padding: 0;
+  border-bottom: 1px solid currentColor;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 14px;
+  letter-spacing: 0.06em;
+  text-align: left;
+  text-transform: uppercase;
+  transition:
+    color var(--motion-hover),
+    border-color var(--motion-hover);
+}
+
+.link-button--danger {
+  color: var(--crimson);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .link-button:hover {
+    color: var(--crimson);
+  }
+
+  .link-button--danger:hover {
+    color: var(--crimson-deep);
   }
 }
 
@@ -201,7 +239,9 @@
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea,
+.textarea {
   width: 100%;
   min-height: 46px;
   padding: 0.6rem 0.7rem;
@@ -214,25 +254,37 @@
   line-height: 22px;
 }
 
-.field input::placeholder {
+.field textarea,
+.textarea {
+  min-height: 96px;
+  resize: vertical;
+}
+
+.field input::placeholder,
+.field textarea::placeholder,
+.textarea::placeholder {
   color: var(--muted);
   opacity: 0.7;
 }
 
 .field input:focus-visible,
-.field select:focus-visible {
+.field select:focus-visible,
+.field textarea:focus-visible,
+.textarea:focus-visible {
   border-color: var(--crimson);
   outline: 2px solid var(--crimson);
   outline-offset: 0;
 }
 
 .field input:disabled,
-.field select:disabled {
+.field select:disabled,
+.field textarea:disabled {
   opacity: 0.55;
 }
 
 .field--compact input,
-.field--compact select {
+.field--compact select,
+.field--compact textarea {
   min-height: 40px;
   font-size: 14px;
 }

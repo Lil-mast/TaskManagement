@@ -1,10 +1,9 @@
 import { useMemo, useState, type FormEvent } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 
-import { Wordmark } from '@/components/Wordmark';
-import { ApiError, briefingApi, healthApi, tasksApi } from '@/lib/api';
+import { ApiError, briefingApi, tasksApi } from '@/lib/api';
 import type { CreateTaskInput, Priority } from '@/lib/api/schemas/common';
 import { useSession } from '@/lib/auth/session';
 import { invalidation, queryKeys } from '@/lib/query/keys';
@@ -28,26 +27,16 @@ function describeError(error: unknown): string {
 }
 
 export function BriefScreen() {
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const { mode, user, signOut } = useSession();
+  const { mode, user } = useSession();
 
   const [taskTitle, setTaskTitle] = useState('');
   const [taskPriority, setTaskPriority] = useState<Priority>('now');
-  const [signingOut, setSigningOut] = useState(false);
-  const [signOutError, setSignOutError] = useState<string | null>(null);
 
   const tasks = useQuery({
     queryKey: queryKeys.tasks.list('open'),
     queryFn: ({ signal }) => tasksApi.list('open', signal),
     retry: 1,
-  });
-
-  const health = useQuery({
-    queryKey: queryKeys.health,
-    queryFn: ({ signal }) => healthApi.get(signal),
-    retry: false,
-    staleTime: 30_000,
   });
 
   const openTasks = tasks.data ?? [];
@@ -96,58 +85,21 @@ export function BriefScreen() {
     };
   }, [openTasks]);
 
-  const payload = brief.data?.payload;
+  const payload = hasTasks ? brief.data?.payload : undefined;
   const priorityCount = payload?.priorities.length ?? 0;
   const drill = payload?.leetcode.pattern ?? 'None due';
   const firstName = (user?.name ?? user?.email ?? 'operator').split(/[ @]/)[0];
-  const initial = (user?.name ?? user?.email ?? 'M').slice(0, 1).toUpperCase();
 
   function addTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const title = taskTitle.trim();
     if (!title) return;
-    createTask.mutate({ title, priority: taskPriority, source: 'manual' });
-  }
-
-  async function handleSignOut() {
-    setSignOutError(null);
-    setSigningOut(true);
-    try {
-      await signOut();
-      queryClient.clear();
-      navigate('/', { replace: true });
-    } catch (caught) {
-      setSignOutError(describeError(caught));
-    } finally {
-      setSigningOut(false);
-    }
+    createTask.mutate({ title, priority: taskPriority, source: 'user' });
   }
 
   return (
     <div className="brief-page">
-      <header className="brief-topbar">
-        <Wordmark to="/brief" size="sm" />
-        <div className="brief-topbar__center">
-          <span className="mono-label">THE DAILY BRIEF</span>
-          <span className="mono-label mono-label--muted">{dateLabel}</span>
-        </div>
-        <div className="brief-topbar__account">
-          <span className="brief-avatar" aria-hidden="true">
-            {initial}
-          </span>
-          <span className="brief-topbar__name">{user?.name ?? user?.email}</span>
-          <button
-            className="brief-topbar__signout"
-            type="button"
-            onClick={() => void handleSignOut()}
-            disabled={signingOut}
-          >
-            {signingOut ? 'Signing out…' : 'Sign out'}
-          </button>
-        </div>
-      </header>
-
-      <main className="brief-main">
+      <div className="brief-surface">
         <section className="brief-hero">
           <div>
             <p className="eyebrow">
@@ -163,18 +115,26 @@ export function BriefScreen() {
             </p>
           </div>
           <div className="brief-hero__action">
-            <button
-              className="btn btn--ink"
-              type="button"
-              onClick={() => composeBrief.mutate()}
-              disabled={!hasTasks || composeBrief.isPending}
-            >
-              {composeBrief.isPending
-                ? 'Composing…'
-                : payload
-                  ? 'Compose again'
-                  : 'Compose brief'}
-            </button>
+            <div className="brief-hero__buttons">
+              <button
+                className="btn btn--ink"
+                type="button"
+                onClick={() => composeBrief.mutate()}
+                disabled={!hasTasks || composeBrief.isPending}
+              >
+                {composeBrief.isPending
+                  ? 'Composing…'
+                  : payload
+                    ? 'Compose again'
+                    : 'Compose brief'}
+              </button>
+              <Link className="btn btn--ghost" to="/tasks">
+                Open ledger
+              </Link>
+              <Link className="btn btn--ghost" to="/capture?return=/brief">
+                Capture
+              </Link>
+            </div>
             <span className="brief-hero__hint">
               {hasTasks
                 ? 'Proposals, not writes.'
@@ -186,12 +146,6 @@ export function BriefScreen() {
         {composeBrief.isError ? (
           <p className="inline-error" role="alert">
             {describeError(composeBrief.error)}
-          </p>
-        ) : null}
-
-        {signOutError ? (
-          <p className="inline-error" role="alert">
-            {signOutError}
           </p>
         ) : null}
 
@@ -253,6 +207,14 @@ export function BriefScreen() {
                   Add the first task in the ledger, then compose a brief. MrT needs at least one
                   real item to ground the day.
                 </p>
+                <div className="panel__empty-actions">
+                  <Link className="btn btn--ink" to="/tasks">
+                    Open the ledger
+                  </Link>
+                  <Link className="btn btn--ghost" to="/capture?return=/brief">
+                    Capture a task
+                  </Link>
+                </div>
               </div>
             ) : brief.isError ? (
               <div className="panel__empty">
@@ -427,19 +389,7 @@ export function BriefScreen() {
             </section>
           </aside>
         </div>
-      </main>
-
-      <footer className="brief-statusbar">
-        <span className="brief-statusbar__item">
-          <span
-            className={`status-pip ${health.isSuccess ? '' : health.isPending ? 'status-pip--idle' : 'status-pip--bad'}`}
-            aria-hidden="true"
-          />
-          {health.isPending ? 'SYNCING' : health.isSuccess ? 'SYNCED' : 'OFFLINE'}
-        </span>
-        <span>{mode === 'dev' ? 'LOCAL SESSION' : 'FIREBASE SESSION'}</span>
-        <span>{user?.email}</span>
-      </footer>
+      </div>
     </div>
   );
 }

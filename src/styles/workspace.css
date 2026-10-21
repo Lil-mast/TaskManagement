@@ -1,8 +1,11 @@
 .brief-page {
-  min-height: 100dvh;
-  display: flex;
-  flex-direction: column;
-  background: var(--canvas);
+  width: 100%;
+  min-height: 0;
+}
+
+.brief-surface {
+  width: 100%;
+  padding-bottom: 2rem;
 }
 
 .brief-topbar {
@@ -117,6 +120,13 @@
   flex: 0 0 auto;
   flex-direction: column;
   align-items: flex-end;
+  gap: 0.65rem;
+}
+
+.brief-hero__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   gap: 0.5rem;
 }
 
@@ -309,7 +319,7 @@
 }
 
 .brief-watch li span {
-  max-width: 18ch;
+  max-width: 30ch;
   color: var(--muted);
   font-family: var(--font-mono);
   font-size: 9px;
@@ -503,6 +513,12 @@
   line-height: 22px;
 }
 
+.panel__empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 .brief-skeleton {
   display: flex;
   flex-direction: column;
@@ -599,8 +615,13 @@
     align-items: flex-start;
   }
 
-  .brief-hero__action .btn {
+  .brief-hero__buttons {
     width: 100%;
+    justify-content: flex-start;
+  }
+
+  .brief-hero__buttons .btn {
+    flex: 1 1 auto;
   }
 
   .brief-hero__hint {

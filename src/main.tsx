@@ -11,9 +11,15 @@ import { SessionProvider } from './lib/auth/session';
 import { queryClient } from './lib/query/client';
 import './styles/base.css';
 import './styles/app.css';
+import './styles/shell.css';
 import './styles/landing.css';
 import './styles/login.css';
 import './styles/workspace.css';
+import './styles/tasks.css';
+import './styles/overlays.css';
+import './styles/capture.css';
+import './styles/onboarding.css';
+import './styles/trash.css';
 import './styles/status.css';
 import './styles/intro.css';
 

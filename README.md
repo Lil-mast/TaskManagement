@@ -63,17 +63,32 @@ The **API boundary is complete**: every current backend route has a typed client
 module, Zod wire contract, timeout/401/429/503 handling, query keys, and MSW
 tests.
 
-The first product slice is live:
+The core daily loop is live:
 
 - `/` — public landing page with the real capability story.
 - `/login` — sign-in and create-account flow. Firebase mode uses Google or
   email/password; local dev-token mode uses an explicit local session.
+- `/onboarding` — four-step calibration for profile, signals, starting tasks,
+  and the first brief. Every step is skippable and the flow can be reopened.
 - `/brief` — the signed-in workspace: real open tasks, a real daily brief when
   one can be composed, and a compact ledger for adding/completing tasks.
+- `/tasks` and `/tasks/:id` — the priority ledger with board/list views, URL
+  filters, search, sorting, optimistic complete/reopen/archive, and a task
+  drawer deep link.
+- `/capture` — natural-language capture. MrT returns editable proposals; only
+  selected proposals are written, and the manual fallback remains available.
+- `/trash` — archived tasks. Restore moves a task back to `open`; purge is a
+  named, irreversible confirmation. There are no bulk actions.
 - `/status` — diagnostics only, kept out of the product flow.
 
+The shared workspace shell provides the rail, top bar, status bar, mobile
+navigation, and the `⌘K` capture shortcut. Onboarding completion is remembered
+per user in local storage; the workspace routes redirect to onboarding until
+the final step is finished. The backend has no completion column, so this marker
+remains client-side.
+
 The remaining surfaces in [`FRONTEND.md`](FRONTEND.md) — prep, inbox, calendar,
-review, knowledge, settings, onboarding — are the next build phase.
+review, knowledge, and settings — are the next build phase.
 
 The landing footer includes a **replay intro** control. The intro is also shown
 on first load.
@@ -174,8 +189,8 @@ Open `http://localhost:5173`. The intro can be skipped with `Esc`, `Enter`,
 
 Use **Get started** or **Sign in** to reach `/login`. In dev-token mode, choose
 **Enter local workspace**; the session is stored locally and takes you to
-`/brief`. With Firebase configured, the same screen offers Google and
-email/password sign-in or account creation.
+`/onboarding` on the first run, then `/brief`. With Firebase configured, the
+same screen offers Google and email/password sign-in or account creation.
 
 ### Auth modes
 
@@ -260,19 +275,29 @@ pnpm build
 ├── src/
 │   ├── App.tsx                 # routes, public/auth guards, intro
 │   ├── components/
+│   │   ├── AppShell.tsx        # rail, top bar, status bar, mobile nav
+│   │   ├── TaskDrawer.tsx      # shared task detail/edit/status drawer
+│   │   ├── TaskComposer.tsx    # new-task modal
+│   │   ├── ConfirmDialog.tsx   # destructive-action confirmation
 │   │   ├── Intro.tsx           # first-load MrT title sequence
 │   │   └── Wordmark.tsx        # MrT lockup with the crimson T
 │   ├── lib/
 │   │   ├── api/                # apiFetch, Zod schemas, endpoint modules
 │   │   ├── auth/               # Firebase provider + session context
-│   │   └── query/              # TanStack Query client + cache keys
+│   │   ├── query/              # TanStack Query client + cache keys
+│   │   ├── onboarding.ts       # per-user completion marker
+│   │   └── task-ui.ts          # priority/date/source display helpers
 │   ├── screens/
 │   │   ├── LandingScreen.tsx   # public page
 │   │   ├── LoginScreen.tsx     # sign in / create account
-│   │   ├── BriefScreen.tsx     # signed-in daily brief + ledger
+│   │   ├── OnboardingScreen.tsx# four-step calibration
+│   │   ├── BriefScreen.tsx     # daily brief + ledger
+│   │   ├── TasksScreen.tsx     # priority ledger, board/list views
+│   │   ├── CaptureScreen.tsx   # proposal review and explicit accept
+│   │   ├── TrashScreen.tsx     # restore and named purge
 │   │   ├── StatusScreen.tsx    # diagnostics only
 │   │   └── NotFoundScreen.tsx
-│   ├── styles/                 # tokens, base, landing, login, workspace
+│   ├── styles/                 # tokens, shell, workspace, tasks, overlays
 │   └── tests/                  # MSW client tests + wire fixtures
 ├── backend/                    # Rust/Axum API + migrations
 ├── asset/                      # design reference and screen.png
