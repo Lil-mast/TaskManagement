@@ -1,5 +1,7 @@
+import { useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
+import { Intro } from '@/components/Intro';
 import { AUTH_MODE } from '@/lib/api/config';
 import { ApiError, ContractError } from '@/lib/api/errors';
 import { healthApi, tasksApi } from '@/lib/api';
@@ -17,6 +19,7 @@ function describeError(error: unknown): string {
 
 export function App() {
   const queryClient = useQueryClient();
+  const [introKey, setIntroKey] = useState(0);
 
   const health = useQuery({
     queryKey: queryKeys.health,
@@ -35,83 +38,95 @@ export function App() {
   const dropCount = tasks.data?.filter((task) => task.priority === 'drop').length ?? 0;
 
   return (
-    <main className="smoke">
-      <header>
-        <p className="smoke__eyebrow">MrT // Daily Intelligence · API boundary</p>
-        <h1 className="smoke__title">The client is wired. The surface comes next.</h1>
-        <p className="smoke__lede">
-          This is the Phase 1 smoke page: health, auth mode, and the priority ledger
-          read through the typed API client. No product UI has been built yet.
-        </p>
-      </header>
-
-      <section className="smoke__grid" aria-label="API status">
-        <article className="smoke__card">
-          <span className="smoke__label">Backend</span>
-          <span className="smoke__metric smoke__status">
-            <span
-              className={`smoke__pip ${health.isSuccess ? '' : 'smoke__pip--bad'}`}
-              aria-hidden="true"
-            />
-            {health.isPending ? '…' : health.isSuccess ? 'OK' : 'DOWN'}
-          </span>
-          <p className="smoke__mono">
-            {health.data
-              ? `v${health.data.version} · db ${health.data.database} · llm ${health.data.anthropic}`
-              : health.isError
-                ? describeError(health.error)
-                : 'contacting /healthz'}
+    <>
+      <Intro key={introKey} />
+      <main className="smoke">
+        <header>
+          <p className="smoke__eyebrow">MrT // Daily Intelligence · API boundary</p>
+          <h1 className="smoke__title">The client is wired. The surface comes next.</h1>
+          <p className="smoke__lede">
+            This is the Phase 1 smoke page: health, auth mode, and the priority ledger
+            read through the typed API client. No product UI has been built yet.
           </p>
-        </article>
+        </header>
 
-        <article className="smoke__card">
-          <span className="smoke__label">Auth mode</span>
-          <span className="smoke__metric">{AUTH_MODE === 'dev' ? 'DEV' : 'FIREBASE'}</span>
+        <section className="smoke__grid" aria-label="API status">
+          <article className="smoke__card">
+            <span className="smoke__label">Backend</span>
+            <span className="smoke__metric smoke__status">
+              <span
+                className={`smoke__pip ${health.isSuccess ? '' : 'smoke__pip--bad'}`}
+                aria-hidden="true"
+              />
+              {health.isPending ? '…' : health.isSuccess ? 'OK' : 'DOWN'}
+            </span>
+            <p className="smoke__mono">
+              {health.data
+                ? `v${health.data.version} · db ${health.data.database} · llm ${health.data.anthropic}`
+                : health.isError
+                  ? describeError(health.error)
+                  : 'contacting /healthz'}
+            </p>
+          </article>
+
+          <article className="smoke__card">
+            <span className="smoke__label">Auth mode</span>
+            <span className="smoke__metric">{AUTH_MODE === 'dev' ? 'DEV' : 'FIREBASE'}</span>
+            <p className="smoke__mono">
+              {AUTH_MODE === 'dev'
+                ? 'Bearer dev — only valid when the backend has no identity provider.'
+                : 'Firebase ID token attached to every /api call.'}
+            </p>
+          </article>
+
+          <article className="smoke__card smoke__card--ink">
+            <span className="smoke__label">Open ledger</span>
+            <span className="smoke__metric">
+              {tasks.isPending ? '—' : tasks.isSuccess ? tasks.data.length : 'ERR'}
+            </span>
+            <p className="smoke__mono">
+              {tasks.isSuccess
+                ? `NOW ${nowCount} · SCHEDULE ${scheduleCount} · DELEGATE ${delegateCount} · DROP ${dropCount}`
+                : tasks.isError
+                  ? describeError(tasks.error)
+                  : 'reading /api/tasks?status=open'}
+            </p>
+          </article>
+        </section>
+
+        <section className="smoke__card" aria-label="Contract notes">
+          <span className="smoke__label">Verified contract</span>
           <p className="smoke__mono">
-            {AUTH_MODE === 'dev'
-              ? 'Bearer dev — only valid when the backend has no identity provider.'
-              : 'Firebase ID token attached to every /api call.'}
+            38 operations · tasks · capture · briefing · leetcode · email · calendar · review ·
+            profile · onboarding · integrations · knowledge
           </p>
-        </article>
-
-        <article className="smoke__card smoke__card--ink">
-          <span className="smoke__label">Open ledger</span>
-          <span className="smoke__metric">
-            {tasks.isPending ? '—' : tasks.isSuccess ? tasks.data.length : 'ERR'}
-          </span>
           <p className="smoke__mono">
-            {tasks.isSuccess
-              ? `NOW ${nowCount} · SCHEDULE ${scheduleCount} · DELEGATE ${delegateCount} · DROP ${dropCount}`
-              : tasks.isError
-                ? describeError(tasks.error)
-                : 'reading /api/tasks?status=open'}
+            Proposals are never persisted by the client. Accepting is a separate, explicit tasks
+            write.
           </p>
-        </article>
-      </section>
-
-      <section className="smoke__card" aria-label="Contract notes">
-        <span className="smoke__label">Verified contract</span>
-        <p className="smoke__mono">
-          38 operations · tasks · capture · briefing · leetcode · email · calendar · review ·
-          profile · onboarding · integrations · knowledge
-        </p>
-        <p className="smoke__mono">
-          Proposals are never persisted by the client. Accepting is a separate, explicit tasks
-          write.
-        </p>
-        <button
-          type="button"
-          className="smoke__button"
-          onClick={() =>
-            void Promise.all([
-              queryClient.invalidateQueries({ queryKey: queryKeys.health }),
-              queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
-            ])
-          }
-        >
-          Refresh probes
-        </button>
-      </section>
-    </main>
+          <div className="smoke__actions">
+            <button
+              type="button"
+              className="smoke__button"
+              onClick={() =>
+                void Promise.all([
+                  queryClient.invalidateQueries({ queryKey: queryKeys.health }),
+                  queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
+                ])
+              }
+            >
+              Refresh probes
+            </button>
+            <button
+              type="button"
+              className="smoke__button smoke__button--ghost"
+              onClick={() => setIntroKey((key) => key + 1)}
+            >
+              Replay intro
+            </button>
+          </div>
+        </section>
+      </main>
+    </>
   );
 }

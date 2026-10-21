@@ -9,6 +9,7 @@ import { createFirebaseTokenProvider } from './lib/auth/firebase';
 import { queryClient } from './lib/query/client';
 import './styles/base.css';
 import './styles/app.css';
+import './styles/intro.css';
 
 if (AUTH_MODE === 'dev') {
   setAuthTokenProvider(createDevTokenProvider());

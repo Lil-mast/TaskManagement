@@ -89,6 +89,12 @@
   background: var(--danger);
 }
 
+.smoke__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
 .smoke__button {
   align-self: flex-start;
   padding: 0.5rem 1rem;
@@ -101,8 +107,24 @@
   transition: background var(--motion-hover);
 }
 
-.smoke__button:hover {
-  background: var(--crimson);
+.smoke__button--ghost {
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  transition:
+    background var(--motion-hover),
+    color var(--motion-hover);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .smoke__button:hover {
+    background: var(--crimson);
+  }
+
+  .smoke__button--ghost:hover {
+    background: var(--ink);
+    color: var(--cream);
+  }
 }
 
 .smoke__error {
