@@ -23,6 +23,7 @@ use crate::AppState;
 pub fn routes() -> Router<Arc<AppState>> {
     Router::new()
         .route("/", get(status))
+        .route("/dailydev/feeds", get(dailydev_feeds).post(dailydev_refresh))
         .route("/google/url", get(consent_url))
         .route("/google/callback", get(callback))
         .route("/google", delete(disconnect))
@@ -88,8 +89,62 @@ async fn status(
         "clients_configured": {
             "google": state.calendar.as_ref().map(|c| c.is_configured()).unwrap_or(false),
             "gmail": state.email.as_ref().map(|e| e.is_configured()).unwrap_or(false),
+            "dailydev": state
+                .dailydev
+                .as_ref()
+                .map(|d| d.is_configured())
+                .unwrap_or(false),
         }
     })))
+}
+
+// ---------------------------------------------------------------------------
+// daily.dev feeds — GET = cached read (24h TTL), POST = force refresh
+// ---------------------------------------------------------------------------
+
+fn dailydev_client(
+    state: &AppState,
+) -> AppResult<&crate::services::dailydev::DailyDevClient> {
+    let client = state.dailydev.as_ref().ok_or_else(|| {
+        AppError::Unavailable(
+            "daily.dev connector not configured (set GROWTH_DAILY_DEV_TOKEN)".into(),
+        )
+    })?;
+    if !client.is_configured() {
+        return Err(AppError::Unavailable(
+            "daily.dev token not configured (set GROWTH_DAILY_DEV_TOKEN)".into(),
+        ));
+    }
+    Ok(client)
+}
+
+fn require_pool(state: &AppState) -> AppResult<&sqlx::PgPool> {
+    state.db.as_ref().ok_or_else(|| {
+        AppError::Unavailable("daily.dev feeds require a database (GROWTH_DATABASE_URL)".into())
+    })
+}
+
+/// `GET /api/integrations/dailydev/feeds` — cached read; refreshes any feed
+/// older than the 24h TTL, degrades to stale cache if the API is down.
+async fn dailydev_feeds(
+    State(state): State<Arc<AppState>>,
+    auth: AuthUser,
+) -> AppResult<Json<crate::services::dailydev::DailyDevFeeds>> {
+    let pool = require_pool(&state)?;
+    let client = dailydev_client(&state)?;
+    let feeds = client.get_feeds_with_cache(pool, &auth.0, false).await?;
+    Ok(Json(feeds))
+}
+
+/// `POST /api/integrations/dailydev/feeds` — force refresh both feeds now.
+async fn dailydev_refresh(
+    State(state): State<Arc<AppState>>,
+    auth: AuthUser,
+) -> AppResult<Json<crate::services::dailydev::DailyDevFeeds>> {
+    let pool = require_pool(&state)?;
+    let client = dailydev_client(&state)?;
+    let feeds = client.get_feeds_with_cache(pool, &auth.0, true).await?;
+    Ok(Json(feeds))
 }
 
 /// `GET /api/integrations/google/url` — consent URL for this user.

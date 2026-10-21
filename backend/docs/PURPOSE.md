@@ -6,11 +6,11 @@
 
 ## The one-sentence version
 
-Every morning the copilot gives you a grounded plan for the day from every
-signal you feed it — your tasks, calendar, inbox, learning feeds, study
-attempts, and the operating principles in its knowledge base — proposes work
-instead of just storing it, and gets better at the job by observing what you
-accept, do, and ignore.
+Every morning the copilot gives MrT a grounded plan for the day from every
+signal you feed it — your tasks, calendar, inbox, daily.dev tech trends,
+study attempts, and the operating principles in its knowledge base — proposes
+work instead of just storing it, and gets better at the job by observing what
+you accept, do, and ignore.
 
 ## The product principle: propose, don't decide
 
@@ -43,7 +43,8 @@ is a loop: **capture → classify → plan → do → review → re-weight**.
 
 1. **Morning brief** — one Claude-composed plan grounded in
    [grounding SQL](./ARCHITECTURE.md): today's tasks by priority, calendar
-   mirror, unread inbox, LeetCode wallet-of-patterns due today, your
+   mirror, unread inbox, **daily.dev trends (top `foryou` + `discussed`
+   items)**, LeetCode wallet-of-patterns due today, your
    onboarding profile (focus areas, target interview date), and the two
    highest-weighted operating principles from the knowledge base. Cached,
    replayable, idempotent per day.
@@ -51,15 +52,23 @@ is a loop: **capture → classify → plan → do → review → re-weight**.
    classified, dated task *proposals* with `source: nl_capture` and
    confidence. Capture nudges with leading principles: before it disagrees
    with you, it shows you the rule it's applying.
-3. **LeetCode spaced repetition** — attempts update an SM-2-lite scheduler
+3. **Tech trends — daily.dev** — the `foryou` and `discussed` feeds from the
+   daily.dev Public API keep the copilot aware of what the industry is
+   buzzing about. The token never leaves the server
+   (`GROWTH_DAILY_DEV_TOKEN`); every feed is cached per user in
+   `dailydev_cache` with a **24h TTL**, so the API is touched at most once
+   a day per feed (force-refresh via `POST /api/integrations/dailydev/feeds`).
+   Feeds are *grounding, not tasks* — the brief may propose "go deeper on
+   <trend>" via normal capture proposals, never by writing tasks itself.
+4. **LeetCode spaced repetition** — attempts update an SM-2-lite scheduler
    (`leetcode_patterns.next_review`), so "today's patterns" surface when
    memory decay says review, not when entropy says random.
-4. **Calendar + Gmail** (consent-gated) — Google Calendar is a **read-only
+5. **Calendar + Gmail** (consent-gated) — Google Calendar is a **read-only
    mirror** (`calendar_events` never becomes `tasks`); Gmail triage
    proposes email-derived tasks with `gmail_msg_id` dedup, so one email never
    becomes two tasks. Resource consent uses the backend's own Google OAuth
    client; sign-in identity is separate (Firebase).
-5. **Knowledge loop** — a curated operating-principles corpus (authored
+6. **Knowledge loop** — a curated operating-principles corpus (authored
    JSON digests of real books, `data/books/`) embedded into
    `knowledge_items` + `knowledge_chunks` (pgvector). Retrieval is hybrid
    (vector ⊕ full-text, RRF-fused) and **weighted by your behavior**:
@@ -68,7 +77,7 @@ is a loop: **capture → classify → plan → do → review → re-weight**.
    weekly review (`/api/review/weekly`, `/cron/weekly`) verifies with
    Claude whether the week's evidence supports the verdict; `/cron/reweight`
    applies the weights. See [RAG_PIPELINE.md](./RAG_PIPELINE.md).
-6. **Weekly review** — analytics (completions, priority breakdown, LeetCode
+7. **Weekly review** — analytics (completions, priority breakdown, LeetCode
    streak, inbox backlog, brief views) + a grounded Claude verdict on
    whether this week moved the growth needle — cached on idempotent upsert.
 
@@ -83,8 +92,9 @@ is a loop: **capture → classify → plan → do → review → re-weight**.
 3. **One LLM choke point.** All Claude traffic flows through
    `AnthropicClient::chat` — token bucket + concurrency semaphore +
    bounded retries. Deterministic fallbacks exist for every LLM outage.
-4. **Secrets server-side only.** Never in git, never in the bundle. The
-   frontend (when rebuilt) ships only public `VITE_*` values.
+4. **Secrets server-side only.** The daily.dev token, API keys, OAuth
+   secrets — never in git, never in a bundle. The frontend (when rebuilt)
+   ships only public `VITE_*` values.
 5. **Mirrors are read-only.** Calendar events never mutate `tasks`. Email
    proposals dedup by message id.
 
@@ -111,6 +121,8 @@ is a loop: **capture → classify → plan → do → review → re-weight**.
   binding. Supabase Auth support remains in code but unused.
 - **LLM:** Anthropic (Claude) through the single client above; embeddings
   via `GROWTH_EMBEDDINGS_API_KEY` (RAG ingest gated until the key exists).
+- **External signals:** daily.dev Public API (trends, `GROWTH_DAILY_DEV_TOKEN`),
+  Google Calendar/Gmail (consent via the backend's own OAuth client).
 - **Ops:** migrations via the project's own `apply_migration` bin (NOT
   `sqlx migrate run`); deploys as a distroless container on **Render**
   (`render.yaml`); crons are external HTTP calls (`/cron/briefing`,

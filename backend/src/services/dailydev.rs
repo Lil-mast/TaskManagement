@@ -78,10 +78,10 @@ impl DailyDevClient {
             .ok_or_else(|| AppError::Unavailable("daily.dev token not configured".into()))?;
         let path = match feed {
             "foryou" => "/feeds/foryou",
-            "discussed" => "/feeds/discussed?period=1",
+            "discussed" => "/feeds/discussed",
             other => return Err(AppError::BadRequest(format!("unknown feed {other:?}"))),
         };
-        let url = format!("{BASE_URL}{path}&limit={limit}");
+        let url = format!("{BASE_URL}{path}?limit={limit}");
         let raw: serde_json::Value = self
             .http
             .get(&url)
@@ -199,6 +199,7 @@ pub fn normalize_items(raw: &serde_json::Value) -> Vec<WatchItem> {
     let empty = Vec::new();
     let array = raw
         .as_array()
+        .or_else(|| raw.get("data").and_then(|v| v.as_array())) // {"data":[…]} — the current Public API shape
         .or_else(|| raw.get("items").and_then(|v| v.as_array()))
         .or_else(|| raw.pointer("/data/items").and_then(|v| v.as_array()))
         .unwrap_or(&empty);
