@@ -39,16 +39,16 @@ carry identity.
 | Endpoint | Method | Auth | Behavior |
 |---|---|---|---|
 | `/healthz` | GET | none | `{ok, version, database, anthropic, auth_mode, llm_tokens_available}` |
-| `/api/capture` | POST | Bearer | Free text → Claude `create_task` tool → priority-classified task proposals (proposals; **never auto-inserts** into the matrix) → persists to `tasks` (`source: nl_capture`) |
-| `/api/tasks` | POST/GET | Bearer | Create (title, **priority** ∈ `now|schedule|delegate|drop`, description?, due_date?, tags?) / list with `?status=&since=&limit=` |
-| `/api/tasks/{id}` | PATCH/DELETE | Bearer | Edit (status transitions set `completed_at`) / soft-delete to trash (restore via PATCH) |
+| `/api/capture` | POST | Bearer | Free text → Claude `create_task` tool → priority-classified **proposals only**. Persistence requires explicit `{"persist": true}` (internal tools); the product accepts through `POST /api/tasks` |
+| `/api/tasks` | POST/GET | Bearer | Create (title, **priority** ∈ `now|schedule|delegate|drop`, description?, due_date?, tags?, source?) / list with `?status=open|done|archived` |
+| `/api/tasks/{id}` | PATCH/DELETE | Bearer | Edit (title, description, priority, status, due_date, tags; `null` clears description/due_date) / soft-delete to trash (restore via PATCH) |
 | `/api/briefing` | GET | Bearer | Today's brief (compose-or-reuse, idempotent) |
-| `/api/briefing/refresh` | POST | Bearer | `{force:true}` recomputes |
+| `/api/briefing/refresh` | POST | Bearer | Recomputes today's brief now |
 | `/api/briefing/accept` | POST | Bearer | Accept a brief's work item → task (human-in-the-loop) |
 | `/api/leetcode/patterns` | GET/POST | Bearer | Space-repetition list (SM-2-lite scheduling) |
-| `/api/leetcode/patterns/{id}` | PATCH | Bearer | Update pattern |
-| `/api/leetcode/attempt` | POST | Bearer | Log attempt; auto-schedules `next_review` |
-| `/api/leetcode/attempt/{id}` | PATCH | Bearer | Correct an attempt → reschedules the pattern |
+| `/api/leetcode/patterns/{id}/delete` | POST | Bearer | Delete a pattern |
+| `/api/leetcode/attempts` | POST/GET | Bearer | Log attempt (auto-schedules `next_review`) / recent attempts `?limit=` |
+| `/api/leetcode/stats` | GET | Bearer | Attempts, no-help rate, average time per pattern |
 | `/api/knowledge/ingest` | POST | Bearer | Body `{items:[…]}` or empty → loads `data/books/*.json`; idempotent by sha256 of content |
 | `/api/knowledge/items` | GET | Bearer | List the corpus (for admin/visibility) |
 | `/api/knowledge/search` | POST | Bearer | Hybrid RRF retrieval (vector + `ts_rank`), quarantine-aware |
@@ -59,13 +59,15 @@ carry identity.
 | `/api/integrations/dailydev/feeds` | GET | Bearer | Cached feeds (24h TTL) |
 | `/api/integrations/google/url` | GET | Bearer | Consent URL (consent includes calendar AND gmail scopes) |
 | `/api/integrations/google/callback` | GET | signed state | OAuth return — `state` carries `(provider, user_id)`, signed (AES-GCM/HKDF) |
-| `/api/integrations/google/disconnect` | POST | Bearer | Revoke + wipe stored token |
-| `/api/integrations/gmail/triage` | POST | Bearer | Fetch ≤15 unseen threads (metadata + 140-char snippet only) → Claude `classify_emails` → `email_triage` proposals (idempotent by msg id) |
-| `/api/email/triage` | GET | Bearer | List triage proposals (`state` filter) |
-| `/api/email/triage/{id}/act` | POST | Bearer | `{action:"done"}` or `{action:"convert_to_task"}` (adds task `source: gmail`) |
+| `/api/integrations/google` | DELETE | Bearer | Revoke + wipe stored token and calendar mirror |
+| `/api/integrations/gmail/url` | GET | Bearer | Gmail consent URL |
+| `/api/integrations/gmail` | DELETE | Bearer | Revoke + wipe Gmail token (triage rows kept) |
+| `/api/email/triage` | POST | Bearer | Fetch ≤15 unseen threads (metadata + 140-char snippet only) → Claude `classify_emails` → `email_triage` proposals (idempotent by msg id) |
+| `/api/email/triage` | GET | Bearer | List triage proposals (`state=open|done|task_created|all`) |
+| `/api/email/triage/{msg_id}/act` | POST | Bearer | `{action:"done"}` or `{action:"task", task_title?}` (adds task `source: gmail`) |
 | `/api/calendar/sync` | POST | Bearer | Horizon sync → `calendar_events` **mirror** (tasks rows never touched) |
-| `/api/calendar/events` | GET | Bearer | Mirror read (upcoming window) |
-| `/api/calendar/plan` | POST | Bearer | UTC-day planner: 09–18 focus windows ≥90 min; suggestions are proposals, ≤120 min |
+| `/api/calendar/events` | GET | Bearer | Mirror read (`?days=&fresh=`) |
+| `/api/calendar/plan` | GET | Bearer | UTC-day planner: 09–18 focus windows ≥90 min; suggestions are proposals, ≤120 min |
 | `/api/profile` | GET/PUT | Bearer | Name, target interview date, focus areas (feeds prompt assembly) |
 | `/api/onboarding` | GET | Bearer | First-run checklist + next_steps |
 | `/api/onboarding/seed` | POST | Bearer | One sample task per priority class — idempotent, refuses non-empty task pool |
@@ -209,4 +211,4 @@ wired to Render monitoring.
 - Google OAuth client + secrets → calendar/gmail consents
 - `GROWTH_CRON_SECRET` → scheduled jobs
 - `render` blueprint deploy + cron rows
-- SPA (frontend) handover to attach Bearer Supabase tokens (checklist in `../docs/phases/PHASE_6.md`)
+- SPA (repo root) is wired to this API — Firebase ID token or backend `dev` token; product screens are the next phase

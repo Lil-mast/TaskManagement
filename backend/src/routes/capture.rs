@@ -18,19 +18,24 @@ pub fn routes() -> Router<Arc<AppState>> {
 #[derive(Debug, Deserialize)]
 pub struct CaptureRequest {
     pub text: String,
+    /// Proposals only by default. `true` is the explicit opt-in used by
+    /// internal tools — the product path accepts through `POST /api/tasks`.
+    #[serde(default)]
+    pub persist: bool,
 }
 
 #[derive(Debug, Serialize)]
 pub struct CaptureResponse {
     pub tasks: Vec<ProposedTask>,
-    /// present when a configured DATABASE_URL auto-saved the proposal
+    /// present only when the caller explicitly opted into `persist: true`
     #[serde(skip_serializing_if = "Option::is_none")]
     pub saved_to_db: Option<usize>,
 }
 
 /// `POST /api/capture` —
 /// `{ "text": "call the dentist tomorrow, finish report before Monday" }` →
-/// Claude tool use → `[ProposedTask]` (persistence live when the DB is wired).
+/// Claude tool use → `[ProposedTask]` (proposals only; persistence requires
+/// the explicit `"persist": true` opt-in).
 pub async fn capture(
     State(state): State<Arc<AppState>>,
     auth: AuthUser,
@@ -43,14 +48,14 @@ pub async fn capture(
     let principles = retrieve_principles(&state, &auth.0, &req.text, 2).await;
     let tasks = service.capture(&req.text, &principles).await?;
 
-    // Optional persistence — flips on with DATABASE_URL, stays silent otherwise.
-    let saved_to_db = match &state.db {
-        Some(pool) => {
+    // Persistence is explicit opt-in — the product rule is "propose, don't decide".
+    let saved_to_db = match (&state.db, req.persist) {
+        (Some(pool), true) => {
             let saved = save_tasks(pool, &auth.0, &tasks).await?;
-            tracing::info!(count = saved, "capture persisted to Postgres");
+            tracing::info!(count = saved, "capture persisted to Postgres (explicit opt-in)");
             Some(saved)
         }
-        None => None,
+        _ => None,
     };
 
     Ok(Json(CaptureResponse { tasks, saved_to_db }))

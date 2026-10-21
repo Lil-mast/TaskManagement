@@ -13,7 +13,7 @@ use axum::{
     Json, Router,
 };
 use chrono::{NaiveDate, Utc};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::core::{
     auth::AuthUser,
@@ -71,14 +71,27 @@ pub struct CreateTaskBody {
 pub struct UpdateTaskBody {
     #[serde(default)]
     pub title: Option<String>,
-    #[serde(default)]
-    pub description: Option<String>,
+    /// `null` clears the field; an absent key leaves it untouched.
+    #[serde(default, deserialize_with = "double_option")]
+    pub description: Option<Option<String>>,
     #[serde(default)]
     pub priority: Option<String>,
     #[serde(default)]
     pub status: Option<String>, // open|done|archived — done stamps completed_at
+    /// `null` clears the field; an absent key leaves it untouched.
+    #[serde(default, deserialize_with = "double_option")]
+    pub due_date: Option<Option<NaiveDate>>,
     #[serde(default)]
-    pub due_date: Option<NaiveDate>,
+    pub tags: Option<Vec<String>>,
+}
+
+/// Distinguishes `{"due_date": null}` (clear) from `{}` (leave untouched).
+fn double_option<'de, T, D>(deserializer: D) -> Result<Option<Option<T>>, D::Error>
+where
+    T: Deserialize<'de>,
+    D: Deserializer<'de>,
+{
+    Deserialize::deserialize(deserializer).map(Some)
 }
 
 #[derive(Debug, Deserialize)]
@@ -144,7 +157,9 @@ async fn create_task(
         )));
     }
     let source = body.source.unwrap_or_else(|| "user".to_string());
-    if !["user", "ai_briefing", "gmail", "dailydev", "leetcode"].contains(&source.as_str()) {
+    if !["user", "ai_briefing", "gmail", "dailydev", "leetcode", "nl_capture"]
+        .contains(&source.as_str())
+    {
         return Err(AppError::BadRequest(format!("unknown source {source:?}")));
     }
 
@@ -187,25 +202,36 @@ async fn update_task(
         }
     }
 
+    let description_present = body.description.is_some();
+    let description_value = body.description.flatten();
+    let due_date_present = body.due_date.is_some();
+    let due_date_value = body.due_date.flatten();
+
     let task = sqlx::query_as::<_, Task>(
         "UPDATE tasks SET
             title        = COALESCE($1, title),
-            description  = COALESCE($2, description),
-            priority     = COALESCE($3, priority),
-            status       = COALESCE($4, status),
-            due_date     = COALESCE($5, due_date),
-            completed_at = CASE WHEN $4 = 'done'
+            description  = CASE WHEN $2 THEN $3 ELSE description END,
+            priority     = COALESCE($4, priority),
+            status       = COALESCE($5, status),
+            due_date     = CASE WHEN $6 THEN $7 ELSE due_date END,
+            tags         = COALESCE($8, tags),
+            completed_at = CASE WHEN $5 = 'done'
                                 THEN COALESCE(completed_at, NOW())
+                                WHEN $5 = 'open'
+                                THEN NULL
                                 ELSE completed_at END
-         WHERE id = $6 AND user_id = $7
+         WHERE id = $9 AND user_id = $10
          RETURNING id, user_id, title, description, priority, status, due_date, completed_at,
                    source, meta, tags, created_at",
     )
     .bind(body.title.as_deref().map(str::trim).filter(|t| !t.is_empty()))
-    .bind(body.description.as_deref().or(None))
+    .bind(description_present)
+    .bind(description_value)
     .bind(body.priority.as_deref())
     .bind(body.status.as_deref())
-    .bind(body.due_date)
+    .bind(due_date_present)
+    .bind(due_date_value)
+    .bind(body.tags.as_deref())
     .bind(id)
     .bind(&auth.0)
     .fetch_optional(pool)

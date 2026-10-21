@@ -5,7 +5,7 @@ pub mod services;
 
 use std::sync::Arc;
 
-use axum::http::HeaderValue;
+use axum::http::{header, HeaderValue, Method};
 use axum::Router;
 use core::config::Config;
 use services::anthropic::{AnthropicClient, AnthropicSettings, DEFAULT_BASE_URL};
@@ -235,7 +235,17 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
 /// Wire the full router: health + capture + tasks + briefing + cron.
 /// The returned router carries no state (`Router<()>`) — ready to `serve`.
 pub fn build_app(state: Arc<AppState>) -> Router<()> {
-    let mut cors = CorsLayer::new();
+    let mut cors = CorsLayer::new()
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PATCH,
+            Method::PUT,
+            Method::DELETE,
+            Method::OPTIONS,
+        ])
+        .allow_headers([header::AUTHORIZATION, header::CONTENT_TYPE, header::ACCEPT])
+        .expose_headers([header::RETRY_AFTER]);
     for origin in &state.config.cors_origins {
         if let Ok(parsed) = origin.parse::<HeaderValue>() {
             cors = cors.allow_origin(parsed);

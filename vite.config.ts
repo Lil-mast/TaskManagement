@@ -18,5 +18,6 @@ export default defineConfig({
     environment: 'node',
     setupFiles: ['./src/tests/setup.ts'],
     restoreMocks: true,
+    exclude: ['**/node_modules/**', '**/dist/**', 'backend/**'],
   },
 });
