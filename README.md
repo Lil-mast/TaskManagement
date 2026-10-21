@@ -61,11 +61,22 @@ flowchart LR
 
 The **API boundary is complete**: every current backend route has a typed client
 module, Zod wire contract, timeout/401/429/503 handling, query keys, and MSW
-tests. The only screen rendered right now is a temporary health/smoke page. The
-product surfaces in [`FRONTEND.md`](FRONTEND.md) are the next build phase.
+tests.
 
-The smoke page includes a **replay intro** button. The intro is also shown on
-first load.
+The first product slice is live:
+
+- `/` — public landing page with the real capability story.
+- `/login` — sign-in and create-account flow. Firebase mode uses Google or
+  email/password; local dev-token mode uses an explicit local session.
+- `/brief` — the signed-in workspace: real open tasks, a real daily brief when
+  one can be composed, and a compact ledger for adding/completing tasks.
+- `/status` — diagnostics only, kept out of the product flow.
+
+The remaining surfaces in [`FRONTEND.md`](FRONTEND.md) — prep, inbox, calendar,
+review, knowledge, settings, onboarding — are the next build phase.
+
+The landing footer includes a **replay intro** control. The intro is also shown
+on first load.
 
 ## Setup
 
@@ -88,7 +99,7 @@ cd backend
 cp .env.example .env
 ```
 
-Edit `backend/.env`. The minimum for a working local app is:
+Edit `backend/.env`. The minimum for the full local product is:
 
 ```dotenv
 GROWTH_DATABASE_URL=postgresql://user:pass@host:5432/db
@@ -159,7 +170,12 @@ VITE_DEV_TOKEN=dev
 ```
 
 Open `http://localhost:5173`. The intro can be skipped with `Esc`, `Enter`,
-`Space`, or the **Skip intro** button.
+`Space`, or the **Skip intro** button. It lifts onto the public landing page.
+
+Use **Get started** or **Sign in** to reach `/login`. In dev-token mode, choose
+**Enter local workspace**; the session is stored locally and takes you to
+`/brief`. With Firebase configured, the same screen offers Google and
+email/password sign-in or account creation.
 
 ### Auth modes
 
@@ -242,14 +258,21 @@ pnpm build
 ```text
 .
 ├── src/
-│   ├── App.tsx                 # temporary API smoke page + intro replay
+│   ├── App.tsx                 # routes, public/auth guards, intro
 │   ├── components/
-│   │   └── Intro.tsx           # first-load MrT title sequence
+│   │   ├── Intro.tsx           # first-load MrT title sequence
+│   │   └── Wordmark.tsx        # MrT lockup with the crimson T
 │   ├── lib/
 │   │   ├── api/                # apiFetch, Zod schemas, endpoint modules
-│   │   ├── auth/               # Firebase token provider
+│   │   ├── auth/               # Firebase provider + session context
 │   │   └── query/              # TanStack Query client + cache keys
-│   ├── styles/                 # design tokens, base, intro, smoke page
+│   ├── screens/
+│   │   ├── LandingScreen.tsx   # public page
+│   │   ├── LoginScreen.tsx     # sign in / create account
+│   │   ├── BriefScreen.tsx     # signed-in daily brief + ledger
+│   │   ├── StatusScreen.tsx    # diagnostics only
+│   │   └── NotFoundScreen.tsx
+│   ├── styles/                 # tokens, base, landing, login, workspace
 │   └── tests/                  # MSW client tests + wire fixtures
 ├── backend/                    # Rust/Axum API + migrations
 ├── asset/                      # design reference and screen.png
@@ -264,7 +287,7 @@ The first-load sequence is deliberately short and skippable. `Mr` rises in ink,
 the `T` lands as a crimson monolith, and a rule draws beneath it with the product
 rule: **propose → decide → move**. It uses transform/opacity only, honours
 `prefers-reduced-motion`, and never blocks the app's data fetching underneath.
-The smoke page has **Replay intro** for another look.
+The landing footer has **Replay intro** for another look.
 
 ## Troubleshooting
 

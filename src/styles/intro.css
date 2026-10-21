@@ -94,7 +94,7 @@
 .intro__t {
   display: inline-grid;
   place-items: center;
-  margin-left: 0.02em;
+  margin-left: 0.05em;
   padding: 0.12em 0.16em 0.015em;
   background: var(--crimson);
   color: var(--cream);

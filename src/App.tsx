@@ -1,132 +1,76 @@
-import { useState } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useState, type ReactNode } from 'react';
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 
 import { Intro } from '@/components/Intro';
-import { AUTH_MODE } from '@/lib/api/config';
-import { ApiError, ContractError } from '@/lib/api/errors';
-import { healthApi, tasksApi } from '@/lib/api';
-import { queryKeys } from '@/lib/query/keys';
+import { Wordmark } from '@/components/Wordmark';
+import { useSession } from '@/lib/auth/session';
+import { BriefScreen } from '@/screens/BriefScreen';
+import { LandingScreen } from '@/screens/LandingScreen';
+import { LoginScreen } from '@/screens/LoginScreen';
+import { NotFoundScreen } from '@/screens/NotFoundScreen';
+import { StatusScreen } from '@/screens/StatusScreen';
 
-function describeError(error: unknown): string {
-  if (error instanceof ApiError) {
-    return `${error.status || 'NET'} ${error.code} — ${error.message}`;
+function ScreenGate({ label = 'CHECKING SESSION' }: { label?: string }) {
+  return (
+    <div className="screen-gate" role="status" aria-live="polite">
+      <Wordmark />
+      <span className="mono-label">{label}</span>
+    </div>
+  );
+}
+
+function PublicOnly({ children }: { children: ReactNode }) {
+  const { status } = useSession();
+  if (status === 'loading') return <ScreenGate />;
+  if (status === 'authenticated') return <Navigate to="/brief" replace />;
+  return <>{children}</>;
+}
+
+function Protected({ children }: { children: ReactNode }) {
+  const { status } = useSession();
+  const location = useLocation();
+
+  if (status === 'loading') return <ScreenGate />;
+  if (status !== 'authenticated') {
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
-  if (error instanceof ContractError) {
-    return `Contract error at ${error.path}`;
-  }
-  return error instanceof Error ? error.message : 'Unknown error';
+  return <>{children}</>;
 }
 
 export function App() {
-  const queryClient = useQueryClient();
   const [introKey, setIntroKey] = useState(0);
-
-  const health = useQuery({
-    queryKey: queryKeys.health,
-    queryFn: ({ signal }) => healthApi.get(signal),
-  });
-
-  const tasks = useQuery({
-    queryKey: queryKeys.tasks.list('open'),
-    queryFn: ({ signal }) => tasksApi.list('open', signal),
-    retry: false,
-  });
-
-  const nowCount = tasks.data?.filter((task) => task.priority === 'now').length ?? 0;
-  const scheduleCount = tasks.data?.filter((task) => task.priority === 'schedule').length ?? 0;
-  const delegateCount = tasks.data?.filter((task) => task.priority === 'delegate').length ?? 0;
-  const dropCount = tasks.data?.filter((task) => task.priority === 'drop').length ?? 0;
 
   return (
     <>
       <Intro key={introKey} />
-      <main className="smoke">
-        <header>
-          <p className="smoke__eyebrow">MrT // Daily Intelligence · API boundary</p>
-          <h1 className="smoke__title">The client is wired. The surface comes next.</h1>
-          <p className="smoke__lede">
-            This is the Phase 1 smoke page: health, auth mode, and the priority ledger
-            read through the typed API client. No product UI has been built yet.
-          </p>
-        </header>
-
-        <section className="smoke__grid" aria-label="API status">
-          <article className="smoke__card">
-            <span className="smoke__label">Backend</span>
-            <span className="smoke__metric smoke__status">
-              <span
-                className={`smoke__pip ${health.isSuccess ? '' : 'smoke__pip--bad'}`}
-                aria-hidden="true"
-              />
-              {health.isPending ? '…' : health.isSuccess ? 'OK' : 'DOWN'}
-            </span>
-            <p className="smoke__mono">
-              {health.data
-                ? `v${health.data.version} · db ${health.data.database} · llm ${health.data.anthropic}`
-                : health.isError
-                  ? describeError(health.error)
-                  : 'contacting /healthz'}
-            </p>
-          </article>
-
-          <article className="smoke__card">
-            <span className="smoke__label">Auth mode</span>
-            <span className="smoke__metric">{AUTH_MODE === 'dev' ? 'DEV' : 'FIREBASE'}</span>
-            <p className="smoke__mono">
-              {AUTH_MODE === 'dev'
-                ? 'Bearer dev — only valid when the backend has no identity provider.'
-                : 'Firebase ID token attached to every /api call.'}
-            </p>
-          </article>
-
-          <article className="smoke__card smoke__card--ink">
-            <span className="smoke__label">Open ledger</span>
-            <span className="smoke__metric">
-              {tasks.isPending ? '—' : tasks.isSuccess ? tasks.data.length : 'ERR'}
-            </span>
-            <p className="smoke__mono">
-              {tasks.isSuccess
-                ? `NOW ${nowCount} · SCHEDULE ${scheduleCount} · DELEGATE ${delegateCount} · DROP ${dropCount}`
-                : tasks.isError
-                  ? describeError(tasks.error)
-                  : 'reading /api/tasks?status=open'}
-            </p>
-          </article>
-        </section>
-
-        <section className="smoke__card" aria-label="Contract notes">
-          <span className="smoke__label">Verified contract</span>
-          <p className="smoke__mono">
-            38 operations · tasks · capture · briefing · leetcode · email · calendar · review ·
-            profile · onboarding · integrations · knowledge
-          </p>
-          <p className="smoke__mono">
-            Proposals are never persisted by the client. Accepting is a separate, explicit tasks
-            write.
-          </p>
-          <div className="smoke__actions">
-            <button
-              type="button"
-              className="smoke__button"
-              onClick={() =>
-                void Promise.all([
-                  queryClient.invalidateQueries({ queryKey: queryKeys.health }),
-                  queryClient.invalidateQueries({ queryKey: queryKeys.tasks.all }),
-                ])
-              }
-            >
-              Refresh probes
-            </button>
-            <button
-              type="button"
-              className="smoke__button smoke__button--ghost"
-              onClick={() => setIntroKey((key) => key + 1)}
-            >
-              Replay intro
-            </button>
-          </div>
-        </section>
-      </main>
+      <Routes>
+        <Route
+          path="/"
+          element={
+            <PublicOnly>
+              <LandingScreen onReplayIntro={() => setIntroKey((key) => key + 1)} />
+            </PublicOnly>
+          }
+        />
+        <Route
+          path="/login"
+          element={
+            <PublicOnly>
+              <LoginScreen />
+            </PublicOnly>
+          }
+        />
+        <Route
+          path="/brief"
+          element={
+            <Protected>
+              <BriefScreen />
+            </Protected>
+          }
+        />
+        <Route path="/status" element={<StatusScreen />} />
+        <Route path="*" element={<NotFoundScreen />} />
+      </Routes>
     </>
   );
 }

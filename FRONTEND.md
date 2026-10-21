@@ -1,4 +1,4 @@
-# MrT — Frontend Build Specification
+# MrT Frontend Build Specification
 
 > **Visual product and engineering plan for rebuilding the MrT SPA.**
 > Greenfield: the previous frontend was removed in `14e972d`. This document defines
