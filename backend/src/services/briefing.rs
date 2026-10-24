@@ -575,3 +575,39 @@ pub struct AcceptItem {
     #[serde(default)]
     pub source: Option<String>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn old_leetcode_payload_still_parses() {
+        let value = json!({ "pattern": "Sliding Window", "note": "Review today." });
+        let parsed: BriefLeetCode = serde_json::from_value(value).unwrap();
+        assert!(parsed.challenge.is_none());
+    }
+
+    #[test]
+    fn daily_drill_payload_parses() {
+        let value = json!({
+            "pattern": "Sliding Window",
+            "note": "Review today.",
+            "challenge": {
+                "title": "Longest Budget Window",
+                "difficulty": "medium",
+                "pattern": "Sliding Window",
+                "time_limit_min": 25,
+                "prompt": "Find the longest valid window.",
+                "examples": [{ "input": "costs = [1,2,1]", "output": "3" }],
+                "constraints": ["1 <= costs.length"],
+                "hints": ["Use two pointers.", "Shrink from the left."],
+                "approach": "Maintain a running sum.",
+                "complexity": "O(n) time.",
+                "code": "function solve(): number { return 0; }",
+                "language": "TypeScript"
+            }
+        });
+        let parsed: BriefLeetCode = serde_json::from_value(value).unwrap();
+        assert_eq!(parsed.challenge.unwrap().time_limit_min, 25);
+    }
+}

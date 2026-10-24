@@ -450,6 +450,7 @@ The dashboard is the brief. It is a daily broadsheet, not a widget farm.
 | Priorities | `brief.payload.priorities[]` | “No priorities. Capture work or accept a brief item.” |
 | Watchlist | `brief.payload.watchlist[]` | “No reading picks today.” |
 | Drill | `brief.payload.leetcode` | “No pattern due. Choose one from Prep.” |
+| Daily drill | `brief.payload.leetcode.challenge` | Saved offline drill when AI generation is unavailable |
 | Principles | `brief.payload.principles_used[]` | “No principle cited today.” |
 | Timeline | `GET /api/calendar/events?days=7` | “Connect Google Calendar to see the week.” |
 | Tech radar | `GET /api/integrations/dailydev/feeds` | “No cached feeds. Refresh daily.dev.” |
@@ -462,6 +463,9 @@ The dashboard is the brief. It is a daily broadsheet, not a widget farm.
 - **Week completion:** `completed / max(created, 1)` from weekly analytics; label
   the formula in a tooltip. Do not ship “velocity” without a definition.
 - **Drill due:** count of patterns with `next_review <= today`.
+- **Daily drill:** start the countdown, reveal hints progressively, and show the
+  reference answer automatically at 00:00. The AI-composed drill wins; a saved
+  offline drill keeps the surface usable when generation is unavailable.
 
 **Interactions**
 
