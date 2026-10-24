@@ -36,11 +36,7 @@ pub async fn health(State(state): State<Arc<AppState>>) -> AppResult<Json<Health
             Some(_) => "unconfigured",
             None => "not-configured",
         },
-        auth_mode: if state.config.firebase_configured() {
-            "firebase"
-        } else {
-            "dev"
-        },
+        auth_mode: state.config.auth_mode(),
         llm_tokens_available: llm_tokens,
     };
     Ok(Json(body))

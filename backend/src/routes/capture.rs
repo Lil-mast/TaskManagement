@@ -44,15 +44,19 @@ pub async fn capture(
     let service = state.capture.as_ref().ok_or_else(|| {
         AppError::Unavailable("capture service not configured (no Anthropic key)".into())
     })?;
+    state.enforce_llm_quota(&auth).await?;
 
-    let principles = retrieve_principles(&state, &auth.0, &req.text, 2).await;
+    let principles = retrieve_principles(&state, &auth.id, &req.text, 2).await;
     let tasks = service.capture(&req.text, &principles).await?;
 
     // Persistence is explicit opt-in — the product rule is "propose, don't decide".
     let saved_to_db = match (&state.db, req.persist) {
         (Some(pool), true) => {
-            let saved = save_tasks(pool, &auth.0, &tasks).await?;
-            tracing::info!(count = saved, "capture persisted to Postgres (explicit opt-in)");
+            let saved = save_tasks(pool, &auth.id, &tasks).await?;
+            tracing::info!(
+                count = saved,
+                "capture persisted to Postgres (explicit opt-in)"
+            );
             Some(saved)
         }
         _ => None,
@@ -63,12 +67,7 @@ pub async fn capture(
 
 /// R2: top-k book principles for this capture text. Requires db + rag; on any
 /// failure returns `[]` — capture must never break because retrieval did.
-async fn retrieve_principles(
-    state: &AppState,
-    user_id: &str,
-    text: &str,
-    k: usize,
-) -> Vec<String> {
+async fn retrieve_principles(state: &AppState, user_id: &str, text: &str, k: usize) -> Vec<String> {
     let (Some(pool), Some(rag)) = (&state.db, &state.rag) else {
         return Vec::new();
     };

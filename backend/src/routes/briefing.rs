@@ -29,7 +29,7 @@ async fn todays_brief(
     let pool = state.db.as_ref().ok_or_else(|| {
         AppError::Unavailable("briefing requires a database (set GROWTH_DATABASE_URL)".into())
     })?;
-    Ok(Json(service.ensure_today(pool, &auth.0, false).await?))
+    Ok(Json(service.ensure_today(pool, &auth.id, false).await?))
 }
 
 async fn refresh_brief(
@@ -40,7 +40,8 @@ async fn refresh_brief(
     let pool = state.db.as_ref().ok_or_else(|| {
         AppError::Unavailable("briefing requires a database (set GROWTH_DATABASE_URL)".into())
     })?;
-    let brief = service.ensure_today(pool, &auth.0, true).await?;
+    state.enforce_llm_quota(&auth).await?;
+    let brief = service.ensure_today(pool, &auth.id, true).await?;
     Ok(Json(json!({ "refreshed": true, "brief": brief.payload })))
 }
 
@@ -53,7 +54,7 @@ async fn accept_item(
     let pool = state.db.as_ref().ok_or_else(|| {
         AppError::Unavailable("accepting requires a database (set GROWTH_DATABASE_URL)".into())
     })?;
-    let id = service.accept(pool, &auth.0, item).await?;
+    let id = service.accept(pool, &auth.id, item).await?;
     Ok(Json(json!({ "accepted": id })))
 }
 

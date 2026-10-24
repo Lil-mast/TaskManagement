@@ -26,7 +26,7 @@ async fn get_patterns(
     auth: AuthUser,
 ) -> AppResult<Json<Vec<svc::LeetCodePattern>>> {
     let pool = require_db(&state)?;
-    Ok(Json(svc::list_patterns(pool, &auth.0).await?))
+    Ok(Json(svc::list_patterns(pool, &auth.id).await?))
 }
 
 async fn upsert_pattern_r(
@@ -35,7 +35,7 @@ async fn upsert_pattern_r(
     Json(body): Json<svc::PatternUpsertBody>,
 ) -> AppResult<Json<svc::LeetCodePattern>> {
     let pool = require_db(&state)?;
-    Ok(Json(svc::upsert_pattern(pool, &auth.0, body).await?))
+    Ok(Json(svc::upsert_pattern(pool, &auth.id, body).await?))
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,7 +49,7 @@ async fn delete_pattern_r(
     Path(p): Path<PatternPath>,
 ) -> AppResult<Json<serde_json::Value>> {
     let pool = require_db(&state)?;
-    let deleted = svc::delete_pattern(pool, &auth.0, p.id).await?;
+    let deleted = svc::delete_pattern(pool, &auth.id, p.id).await?;
     Ok(Json(serde_json::json!({ "deleted": deleted })))
 }
 
@@ -64,7 +64,7 @@ async fn get_attempts(
     Query(q): Query<AttemptsQuery>,
 ) -> AppResult<Json<Vec<svc::LeetCodeAttempt>>> {
     let pool = require_db(&state)?;
-    Ok(Json(svc::recent_attempts(pool, &auth.0, q.limit.unwrap_or(30)).await?))
+    Ok(Json(svc::recent_attempts(pool, &auth.id, q.limit.unwrap_or(30)).await?))
 }
 
 async fn log_attempt_r(
@@ -73,7 +73,7 @@ async fn log_attempt_r(
     Json(body): Json<svc::LogAttemptBody>,
 ) -> AppResult<Json<svc::AttemptResult>> {
     let pool = require_db(&state)?;
-    Ok(Json(svc::log_attempt(pool, &auth.0, body).await?))
+    Ok(Json(svc::log_attempt(pool, &auth.id, body).await?))
 }
 
 #[derive(Debug, Serialize)]
@@ -100,7 +100,7 @@ async fn get_stats(
          GROUP BY p.name
          ORDER BY attempts DESC",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_all(pool)
     .await
     .map_err(|e| AppError::Database(format!("stats: {e}")))?;

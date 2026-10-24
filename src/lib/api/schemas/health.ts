@@ -6,7 +6,7 @@ export const healthSchema = z
     version: z.string(),
     database: z.enum(['configured', 'not-configured']),
     anthropic: z.enum(['configured', 'unconfigured', 'not-configured']),
-    auth_mode: z.enum(['firebase', 'dev']),
+    auth_mode: z.enum(['firebase', 'supabase', 'dev', 'unconfigured']),
     llm_tokens_available: z.number().nullable().optional(),
   })
   .passthrough();

@@ -53,7 +53,7 @@ async fn status(
         "SELECT provider, scopes::text, connected_at FROM integrations
          WHERE user_id = $1 ORDER BY provider",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_all(pool)
     .await
     .map_err(|e| AppError::Database(format!("integration probe: {e}")))?;
@@ -61,7 +61,7 @@ async fn status(
     let cached: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM calendar_events WHERE user_id = $1",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_one(pool)
     .await
     .map_err(|e| AppError::Database(format!("calendar count: {e}")))?;
@@ -132,7 +132,7 @@ async fn dailydev_feeds(
 ) -> AppResult<Json<crate::services::dailydev::DailyDevFeeds>> {
     let pool = require_pool(&state)?;
     let client = dailydev_client(&state)?;
-    let feeds = client.get_feeds_with_cache(pool, &auth.0, false).await?;
+    let feeds = client.get_feeds_with_cache(pool, &auth.id, false).await?;
     Ok(Json(feeds))
 }
 
@@ -143,7 +143,7 @@ async fn dailydev_refresh(
 ) -> AppResult<Json<crate::services::dailydev::DailyDevFeeds>> {
     let pool = require_pool(&state)?;
     let client = dailydev_client(&state)?;
-    let feeds = client.get_feeds_with_cache(pool, &auth.0, true).await?;
+    let feeds = client.get_feeds_with_cache(pool, &auth.id, true).await?;
     Ok(Json(feeds))
 }
 
@@ -158,7 +158,7 @@ async fn consent_url(
                 .into(),
         )
     })?;
-    Ok(Json(json!({ "url": svc.consent_url(&auth.0) })))
+    Ok(Json(json!({ "url": svc.consent_url(&auth.id) })))
 }
 
 #[derive(Debug, Deserialize)]
@@ -239,7 +239,7 @@ async fn disconnect(
     let pool = state.db.as_ref().ok_or_else(|| {
         AppError::Unavailable("integrations require a database (set GROWTH_DATABASE_URL)".into())
     })?;
-    let deleted = svc.disconnect(pool, &auth.0).await?;
+    let deleted = svc.disconnect(pool, &auth.id).await?;
     Ok(Json(json!({ "disconnected": deleted })))
 }
 
@@ -254,7 +254,7 @@ async fn gmail_consent_url(
                 .into(),
         )
     })?;
-    Ok(Json(json!({ "url": svc.consent_url(&auth.0) })))
+    Ok(Json(json!({ "url": svc.consent_url(&auth.id) })))
 }
 
 /// `DELETE /api/integrations/gmail` — revoke + drop the token row
@@ -269,6 +269,6 @@ async fn gmail_disconnect(
     let pool = state.db.as_ref().ok_or_else(|| {
         AppError::Unavailable("integrations require a database (set GROWTH_DATABASE_URL)".into())
     })?;
-    let deleted = svc.disconnect(pool, &auth.0).await?;
+    let deleted = svc.disconnect(pool, &auth.id).await?;
     Ok(Json(json!({ "disconnected": deleted })))
 }

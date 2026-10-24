@@ -131,7 +131,7 @@ async fn list_tasks(
          WHERE user_id = $1 AND status = $2
          ORDER BY created_at DESC",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .bind(status)
     .fetch_all(pool)
     .await
@@ -172,7 +172,7 @@ async fn create_task(
     .bind(body.title.trim())
     .bind(body.description.as_deref().or(Some("")))
     .bind(&body.priority)
-    .bind(&auth.0)
+    .bind(&auth.id)
     .bind(body.due_date)
     .bind(body.tags.unwrap_or_default())
     .bind(source)
@@ -233,7 +233,7 @@ async fn update_task(
     .bind(due_date_value)
     .bind(body.tags.as_deref())
     .bind(id)
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_optional(pool)
     .await
     .map_err(|e| AppError::Database(format!("update task: {e}")))?
@@ -253,7 +253,7 @@ async fn delete_task(
     if q.purge == Some(true) {
         let res = sqlx::query("DELETE FROM tasks WHERE id = $1 AND user_id = $2")
             .bind(id)
-            .bind(&auth.0)
+            .bind(&auth.id)
             .execute(pool)
             .await
             .map_err(|e| AppError::Database(format!("purge task: {e}")))?;
@@ -265,7 +265,7 @@ async fn delete_task(
         "UPDATE tasks SET status = 'archived' WHERE id = $1 AND user_id = $2 AND status != 'archived'",
     )
     .bind(id)
-    .bind(&auth.0)
+    .bind(&auth.id)
     .execute(pool)
     .await
     .map_err(|e| AppError::Database(format!("archive task: {e}")))?;

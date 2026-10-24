@@ -48,8 +48,8 @@ async fn sync(
 ) -> AppResult<Json<serde_json::Value>> {
     let svc = require_calendar(&state)?;
     let pool = require_db(&state)?;
-    let stored = svc.sync(pool, &auth.0).await?;
-    tracing::info!(user = ?auth.0, stored, "calendar sync done");
+    let stored = svc.sync(pool, &auth.id).await?;
+    tracing::info!(user = ?auth.id, stored, "calendar sync done");
     Ok(Json(json!({ "synced_events": stored })))
 }
 
@@ -79,13 +79,13 @@ async fn events(
     if q.fresh.unwrap_or(false) {
         if let Ok(svc) = require_calendar(&state) {
             // sync is best-effort for reads — stale mirror beats a failure
-            let _ = svc.sync(pool, &auth.0).await;
+            let _ = svc.sync(pool, &auth.id).await;
         }
     }
     let days = q.days.unwrap_or(SYNC_HORIZON_DAYS).clamp(1, 28);
     let now = Utc::now();
     let stored =
-        crate::services::calendar::CalendarService::mirrored_events(pool, &auth.0, now, now + Duration::days(days))
+        crate::services::calendar::CalendarService::mirrored_events(pool, &auth.id, now, now + Duration::days(days))
             .await?;
     Ok(Json(stored.into_iter().map(CalendarEventOut::from).collect()))
 }
@@ -111,14 +111,14 @@ async fn plan(
     // refreshed mirror (sync may fail with a dead token → still serve gaps)
     if state.calendar.is_some() {
         if let Ok(svc) = require_calendar(&state) {
-            let _ = svc.sync(pool, &auth.0).await;
+            let _ = svc.sync(pool, &auth.id).await;
         }
     }
 
     let now = Utc::now();
     let to = now + Duration::days(SYNC_HORIZON_DAYS);
     let mirrored =
-        crate::services::calendar::CalendarService::mirrored_events(pool, &auth.0, now, to).await?;
+        crate::services::calendar::CalendarService::mirrored_events(pool, &auth.id, now, to).await?;
 
     let events: Vec<planner::BusyBlock> = mirrored
         .iter()
@@ -138,7 +138,7 @@ async fn plan(
          ORDER BY created_at ASC
          LIMIT 5",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_all(pool)
     .await
     .map_err(|e| AppError::Database(format!("plan tasks: {e}")))?;

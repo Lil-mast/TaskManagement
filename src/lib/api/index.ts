@@ -6,6 +6,7 @@ export { parseWire } from './parse';
 export { setAuthTokenProvider, createDevTokenProvider } from './auth';
 export type { AuthTokenProvider, TokenProviderOptions } from './auth';
 
+export { authApi } from './endpoints/auth';
 export { healthApi } from './endpoints/health';
 export { tasksApi } from './endpoints/tasks';
 export { captureApi } from './endpoints/capture';
@@ -20,6 +21,7 @@ export { integrationsApi } from './endpoints/integrations';
 export { knowledgeApi } from './endpoints/knowledge';
 
 export * from './schemas/common';
+export * from './schemas/auth';
 export * from './schemas/health';
 export * from './schemas/capture';
 export * from './schemas/briefing';

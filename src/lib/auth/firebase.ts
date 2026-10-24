@@ -4,6 +4,8 @@ import {
   createUserWithEmailAndPassword,
   getAuth,
   onAuthStateChanged,
+  reload,
+  sendEmailVerification,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut as firebaseSignOut,
@@ -58,7 +60,26 @@ export async function signInWithEmail(email: string, password: string): Promise<
 export async function signUpWithEmail(email: string, password: string): Promise<User> {
   if (!auth) throw new Error('Firebase is not configured for this deployment.');
   const result = await createUserWithEmailAndPassword(auth, email, password);
+  try {
+    await sendEmailVerification(result.user);
+  } catch {
+    // The account exists; the blocked-account panel offers a resend.
+  }
   return result.user;
+}
+
+export async function resendVerificationEmail(): Promise<void> {
+  if (!auth?.currentUser) throw new Error('Sign in again before requesting another email.');
+  if (auth.currentUser.emailVerified) return;
+  await sendEmailVerification(auth.currentUser);
+}
+
+/** Re-read the Firebase profile so a just-verified email becomes visible. */
+export async function reloadCurrentUser(): Promise<User | null> {
+  if (!auth?.currentUser) return null;
+  await reload(auth.currentUser);
+  await auth.currentUser.getIdToken(true);
+  return auth.currentUser;
 }
 
 export async function signOut(): Promise<void> {

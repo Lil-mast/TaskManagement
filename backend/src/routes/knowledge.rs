@@ -55,15 +55,16 @@ async fn ingest(
 ) -> AppResult<Json<IngestSummary>> {
     let rag = require_rag(&state)?;
     let pool = require_db(&state)?;
+    state.enforce_llm_quota(&auth).await?;
 
     let mut items = body.map(|Json(b)| b.items).unwrap_or_default();
     if items.is_empty() {
         items = load_books_from_disk(&state)?;
     }
 
-    let summary = rag.ingest(pool, &auth.0, &items).await?;
+    let summary = rag.ingest(pool, &auth.id, &items).await?;
     tracing::info!(
-        user = ?auth.0,
+        user = ?auth.id,
         received = summary.items_received,
         new = summary.items_new,
         embedded = summary.chunks_embedded,
@@ -85,7 +86,7 @@ async fn list_items(
          WHERE user_id = $1
          ORDER BY book, created_at",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_all(pool)
     .await
     .map_err(|e| AppError::Database(format!("knowledge list: {e}")))?;
@@ -107,8 +108,9 @@ async fn search(
 ) -> AppResult<Json<Vec<KnowledgeHit>>> {
     let rag = require_rag(&state)?;
     let pool = require_db(&state)?;
+    state.enforce_llm_quota(&auth).await?;
     let hits = rag
-        .retrieve(pool, &auth.0, &body.query, body.k.unwrap_or(6), "search")
+        .retrieve(pool, &auth.id, &body.query, body.k.unwrap_or(6), "search")
         .await?;
     Ok(Json(hits))
 }
@@ -126,7 +128,7 @@ async fn feedback(
 ) -> AppResult<Json<serde_json::Value>> {
     let rag = require_rag(&state)?;
     let pool = require_db(&state)?;
-    rag.upvote(pool, &auth.0, body.item_id).await?;
+    rag.upvote(pool, &auth.id, body.item_id).await?;
     Ok(Json(json!({ "ok": true, "item_id": body.item_id })))
 }
 
@@ -165,7 +167,7 @@ async fn weights(
          ORDER BY ki.effective_weight DESC,
                   COALESCE(ki.accepted_count, 0) DESC, ki.book",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_all(pool)
     .await
     .map_err(|e| AppError::Database(format!("weights read: {e}")))?;
@@ -174,7 +176,7 @@ async fn weights(
         "SELECT COUNT(*) FROM knowledge_items
          WHERE user_id = $1 AND effective_weight <= 0.15",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_one(pool)
     .await
     .map_err(|e| AppError::Database(format!("weights count: {e}")))?;
@@ -191,10 +193,9 @@ async fn weights(
 // ---------------------------------------------------------------------------
 
 fn require_rag(state: &AppState) -> AppResult<&RagService> {
-    let rag = state
-        .rag
-        .as_ref()
-        .ok_or_else(|| AppError::Unavailable("embeddings not configured (set GROWTH_EMBEDDINGS_API_KEY)".into()))?;
+    let rag = state.rag.as_ref().ok_or_else(|| {
+        AppError::Unavailable("embeddings not configured (set GROWTH_EMBEDDINGS_API_KEY)".into())
+    })?;
     if !rag.is_ready() {
         return Err(AppError::Unavailable(
             "embeddings API key missing — set GROWTH_EMBEDDINGS_API_KEY".into(),
@@ -232,8 +233,7 @@ fn load_books_from_disk(state: &AppState) -> AppResult<Vec<KnowledgeIngestItem>>
         }
         let raw = std::fs::read_to_string(&path)
             .map_err(|e| AppError::BadRequest(format!("read {:?}: {e}", path)))?;
-        let parsed:
-            Result<Vec<KnowledgeIngestItem>, _> = serde_json::from_str(&raw);
+        let parsed: Result<Vec<KnowledgeIngestItem>, _> = serde_json::from_str(&raw);
         match parsed {
             Ok(mut list) => items.append(&mut list),
             Err(e) => {

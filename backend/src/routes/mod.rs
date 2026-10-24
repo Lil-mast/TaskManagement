@@ -1,3 +1,4 @@
+pub mod auth;
 pub mod briefing;
 pub mod calendar;
 pub mod capture;
@@ -18,6 +19,7 @@ pub mod tasks;
 pub fn router() -> axum::Router<std::sync::Arc<crate::AppState>> {
     axum::Router::new()
         .route("/healthz", axum::routing::get(health::health))
+        .nest("/api/auth", auth::routes())
         .nest("/api/capture", capture::routes())
         .nest("/api/tasks", tasks::routes())
         .nest("/api/briefing", briefing::routes())

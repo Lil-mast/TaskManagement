@@ -48,21 +48,29 @@ export function LoginScreen() {
   const isSignup = mode === 'signup';
 
   const {
+    blockedReason,
     configured,
     mode: authMode,
     enterDevSession,
+    refreshSession,
+    resendVerification,
     signInWithGoogle,
     signInWithEmail,
+    signOut,
     signUpWithEmail,
+    status,
+    user,
   } = useSession();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   function switchMode(next: 'signin' | 'signup') {
     setError(null);
+    setNotice(null);
     if (next === 'signup') setParams({ mode: 'signup' });
     else setParams({});
   }
@@ -99,7 +107,48 @@ export function LoginScreen() {
     }
   }
 
+  async function handleResend() {
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      await resendVerification();
+      setNotice('Verification email sent. Check your inbox, then come back here.');
+    } catch (caught) {
+      setError(authErrorCopy(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleRefresh() {
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      await refreshSession();
+    } catch (caught) {
+      setError(authErrorCopy(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleSignOut() {
+    setError(null);
+    setNotice(null);
+    setBusy(true);
+    try {
+      await signOut();
+    } catch (caught) {
+      setError(authErrorCopy(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   const devMode = authMode === 'dev';
+  const blocked = status === 'blocked';
 
   return (
     <div className="auth">
@@ -130,8 +179,16 @@ export function LoginScreen() {
 
         <section className="auth__panel" aria-label={isSignup ? 'Create account' : 'Sign in'}>
           <div className="auth__panel-head">
-            <p className="eyebrow">{isSignup ? 'NEW OPERATOR' : 'WELCOME BACK'}</p>
-            <h2>{isSignup ? 'Create your workspace.' : 'Sign in to your workspace.'}</h2>
+            <p className="eyebrow">
+              {blocked ? 'ACCESS CHECK' : isSignup ? 'NEW OPERATOR' : 'WELCOME BACK'}
+            </p>
+            <h2>
+              {blocked
+                ? 'One more step.'
+                : isSignup
+                  ? 'Create your workspace.'
+                  : 'Sign in to your workspace.'}
+            </h2>
           </div>
 
           {!configured ? (
@@ -145,6 +202,74 @@ export function LoginScreen() {
               <Link className="btn btn--ghost" to="/">
                 Back to landing
               </Link>
+            </div>
+          ) : blocked ? (
+            <div className="auth__notice" role="alert">
+              <p className="eyebrow">
+                {blockedReason === 'email_unverified'
+                  ? 'EMAIL NOT VERIFIED'
+                  : blockedReason === 'not_invited'
+                    ? 'INVITE ONLY'
+                    : 'ACCESS CHECK FAILED'}
+              </p>
+              <h3>
+                {blockedReason === 'email_unverified'
+                  ? 'Verify your email to continue.'
+                  : blockedReason === 'not_invited'
+                    ? "This account isn't on the invite list."
+                    : "Couldn't verify workspace access."}
+              </h3>
+              <p>
+                {blockedReason === 'email_unverified'
+                  ? `We sent a verification link to ${user?.email ?? 'your email'}. Open it, then check again.`
+                  : blockedReason === 'not_invited'
+                    ? 'MrT is invite-only. Ask the admin to add this email, then sign in again.'
+                    : 'The API could not confirm your account. Check the backend auth configuration and connection, then try again.'}
+              </p>
+              {notice ? (
+                <p className="auth__hint" role="status">
+                  {notice}
+                </p>
+              ) : null}
+              {error ? (
+                <p className="auth__error" role="alert">
+                  {error}
+                </p>
+              ) : null}
+              <div className="auth__actions">
+                {blockedReason === 'email_unverified' ? (
+                  <button
+                    className="btn btn--ink"
+                    type="button"
+                    onClick={() => void handleResend()}
+                    disabled={busy}
+                  >
+                    {busy ? 'Sending…' : 'Resend verification'}
+                  </button>
+                ) : null}
+                {blockedReason !== 'not_invited' ? (
+                  <button
+                    className="btn btn--ghost"
+                    type="button"
+                    onClick={() => void handleRefresh()}
+                    disabled={busy}
+                  >
+                    {busy
+                      ? 'Checking…'
+                      : blockedReason === 'email_unverified'
+                        ? "I've verified — check again"
+                        : 'Try again'}
+                  </button>
+                ) : null}
+                <button
+                  className="btn btn--ghost"
+                  type="button"
+                  onClick={() => void handleSignOut()}
+                  disabled={busy}
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
           ) : devMode ? (
             <div className="auth__dev">
@@ -250,6 +375,13 @@ export function LoginScreen() {
                   {busy ? 'Working…' : isSignup ? 'Create account' : 'Sign in'}
                 </button>
               </form>
+
+              {isSignup ? (
+                <p className="auth__hint">
+                  Accounts are invite-only. Use the email the admin invited; you will need to
+                  verify it before entering.
+                </p>
+              ) : null}
 
               <p className="auth__legal">
                 By continuing, you agree to the workspace rule: MrT proposes, and you decide.

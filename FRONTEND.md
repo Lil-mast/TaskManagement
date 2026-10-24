@@ -255,20 +255,27 @@ flowchart TD
     B -- no --> C["/login"]
     C --> D["Google popup or email/password"]
     D --> E["Firebase ID token"]
-    E --> F["Attach Bearer on every API call"]
-    F --> G{"401?"}
-    G -- yes --> H["Force token refresh once"]
-    H --> I{"Still 401?"}
-    I -- yes --> C
-    I -- no --> J["Continue"]
-    G -- no --> J
-    J --> K["/brief"]
+    E --> F["GET /api/auth/me"]
+    F --> G{"allowed?"}
+    G -- no --> H["Blocked panel: verify email / not invited"]
+    G -- yes --> I["Attach Bearer on every API call"]
+    I --> J{"401?"}
+    J -- yes --> K["Force token refresh once"]
+    K --> L{"Still 401?"}
+    L -- yes --> C
+    L -- no --> M["Continue"]
+    J -- no --> M
+    M --> N["/brief"]
 ```
 
 - Google popup is the primary path; email/password is the fallback.
+- Accounts are invite-only. `/api/auth/me` decides between the workspace and a
+  blocked panel that explains an unverified email or missing invite.
 - Handle popup blocked, cancelled, network failure, disabled account, and expired
   session with specific copy — not a generic “Something went wrong”.
 - Never store tokens in `localStorage`; use the Firebase SDK’s token lifecycle.
+- Non-admin API calls are budgeted per user (60/min plus 10 LLM actions/hour);
+  show the server’s `Retry-After` when a `429` arrives.
 
 ### 4.3 The daily loop
 

@@ -46,12 +46,12 @@ async fn get_weekly(
     let pool = require_db(&state)?;
     let week_start = svc::week_start_of(q.week.unwrap_or_else(|| chrono::Utc::now().date_naive()));
 
-    let analytics = svc::analytics(pool, &auth.0, week_start).await?;
+    let analytics = svc::analytics(pool, &auth.id, week_start).await?;
     let stored: Option<svc::StoredReview> = sqlx::query_as(
         "SELECT user_id, week_start, payload, model
          FROM weekly_reviews WHERE user_id = $1 AND week_start = $2",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .bind(&week_start)
     .fetch_optional(pool)
     .await
@@ -71,10 +71,13 @@ async fn run_weekly(
     auth: AuthUser,
 ) -> AppResult<Json<svc::StoredReview>> {
     let pool = require_db(&state)?;
-    let stored =
-        svc::run_weekly(pool, &auth.0, state.anthropic.as_ref(), svc::week_start_of(
-            chrono::Utc::now().date_naive(),
-        ))
-        .await?;
+    state.enforce_llm_quota(&auth).await?;
+    let stored = svc::run_weekly(
+        pool,
+        &auth.id,
+        state.anthropic.as_ref(),
+        svc::week_start_of(chrono::Utc::now().date_naive()),
+    )
+    .await?;
     Ok(Json(stored))
 }

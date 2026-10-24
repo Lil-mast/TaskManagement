@@ -2,7 +2,7 @@ import { HttpResponse, http } from 'msw';
 import { setupServer } from 'msw/node';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { captureApi, tasksApi } from '@/lib/api';
+import { authApi, captureApi, tasksApi } from '@/lib/api';
 import { setAuthTokenProvider } from '@/lib/api/auth';
 import { taskFixture } from '../fixtures';
 
@@ -57,6 +57,30 @@ describe('tasksApi', () => {
     );
 
     await expect(tasksApi.purge(taskFixture.id)).resolves.toBe(1);
+  });
+});
+
+describe('authApi', () => {
+  it('reads the access gate without consuming a workspace route', async () => {
+    server.use(
+      http.get('http://localhost:8000/api/auth/me', ({ request }) => {
+        expect(request.headers.get('authorization')).toBe('Bearer fixture-token');
+        return HttpResponse.json({
+          user_id: 'firebase-uid',
+          email: 'invited@example.com',
+          name: 'Invited operator',
+          email_verified: true,
+          is_admin: false,
+          allowed: true,
+          reason: null,
+          auth_mode: 'firebase',
+        });
+      }),
+    );
+
+    const me = await authApi.me();
+    expect(me.allowed).toBe(true);
+    expect(me.is_admin).toBe(false);
   });
 });
 

@@ -12,8 +12,14 @@ pub enum AppError {
     #[error("unauthorized: {0}")]
     Unauthorized(String),
 
-    #[error("rate limited: {0}")]
-    RateLimited(String),
+    #[error("forbidden: {0}")]
+    Forbidden(String),
+
+    #[error("rate limited: {message}")]
+    RateLimited {
+        message: String,
+        retry_after_secs: u64,
+    },
 
     /// an upstream API (Anthropic / Google / daily.dev) failed after retries
     #[error("upstream error: {0}")]
@@ -39,7 +45,8 @@ impl IntoResponse for AppError {
     fn into_response(self) -> Response {
         let (status, code) = match &self {
             AppError::Unauthorized(_) => (StatusCode::UNAUTHORIZED, "unauthorized"),
-            AppError::RateLimited(_) => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
+            AppError::Forbidden(_) => (StatusCode::FORBIDDEN, "forbidden"),
+            AppError::RateLimited { .. } => (StatusCode::TOO_MANY_REQUESTS, "rate_limited"),
             AppError::Upstream(_) => (StatusCode::BAD_GATEWAY, "upstream_error"),
             AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "bad_request"),
             AppError::Unavailable(_) => (StatusCode::SERVICE_UNAVAILABLE, "unavailable"),
@@ -50,8 +57,47 @@ impl IntoResponse for AppError {
         let body = Json(json!({
             "error": { "code": code, "message": self.to_string() }
         }));
-        (status, body).into_response()
+        let mut response = (status, body).into_response();
+        if let AppError::RateLimited {
+            retry_after_secs, ..
+        } = &self
+        {
+            if let Ok(value) = retry_after_secs.to_string().parse() {
+                response
+                    .headers_mut()
+                    .insert(axum::http::header::RETRY_AFTER, value);
+            }
+        }
+        response
     }
 }
 
 pub type AppResult<T> = Result<T, AppError>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rate_limited_sets_retry_after() {
+        let response = AppError::RateLimited {
+            message: "slow down".into(),
+            retry_after_secs: 12,
+        }
+        .into_response();
+        assert_eq!(response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(
+            response
+                .headers()
+                .get(axum::http::header::RETRY_AFTER)
+                .unwrap(),
+            "12"
+        );
+    }
+
+    #[test]
+    fn forbidden_is_403() {
+        let response = AppError::Forbidden("not invited".into()).into_response();
+        assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    }
+}

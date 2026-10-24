@@ -19,7 +19,7 @@ export async function getAuthToken(options?: TokenProviderOptions): Promise<stri
 
 /**
  * Local backend auth. Only valid when the server has no identity provider
- * configured (its `auth_mode` is `dev`).
+ * configured, has `GROWTH_ALLOW_DEV_AUTH=true`, and reports `auth_mode: "dev"`.
  */
 export function createDevTokenProvider(token = import.meta.env.VITE_DEV_TOKEN || 'dev'): AuthTokenProvider {
   return async () => token;

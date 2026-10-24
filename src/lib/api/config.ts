@@ -11,8 +11,25 @@ export const API_BASE_URL = withoutTrailingSlash(
 
 export type AuthMode = 'dev' | 'firebase';
 
+const firebaseEnvConfigured = [
+  'VITE_FIREBASE_API_KEY',
+  'VITE_FIREBASE_AUTH_DOMAIN',
+  'VITE_FIREBASE_PROJECT_ID',
+  'VITE_FIREBASE_STORAGE_BUCKET',
+  'VITE_FIREBASE_MESSAGING_SENDER_ID',
+  'VITE_FIREBASE_APP_ID',
+].every((key) => String(import.meta.env[key] ?? '').trim().length > 0);
+
+const explicitAuthMode = import.meta.env.VITE_AUTH_MODE;
+
 export const AUTH_MODE: AuthMode =
-  import.meta.env.VITE_AUTH_MODE ?? (import.meta.env.DEV ? 'dev' : 'firebase');
+  explicitAuthMode === 'dev' || explicitAuthMode === 'firebase'
+    ? explicitAuthMode
+    : firebaseEnvConfigured
+      ? 'firebase'
+      : import.meta.env.DEV
+        ? 'dev'
+        : 'firebase';
 
 /** Per-endpoint budgets. LLM-backed calls get room; ordinary reads stay tight. */
 export const TIMEOUTS = {

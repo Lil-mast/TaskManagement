@@ -5,15 +5,22 @@
 > together.
 
 Base URL: `VITE_API_BASE_URL` (default `http://localhost:8000`).
-Auth: `Authorization: Bearer <Firebase ID token>`; local dev token `dev` is only
-valid when the backend has no identity provider configured.
-Errors: `{ "error": { "code": "...", "message": "..." } }`.
+Auth: `Authorization: Bearer <Firebase ID token>`. Local dev token `dev` is only
+valid when no identity provider is configured and `GROWTH_ALLOW_DEV_AUTH=true`.
+Every workspace `/api` route also enforces the invite allowlist; non-admin users
+get a per-user request budget. Admins bypass both. Errors:
+`{ "error": { "code": "...", "message": "..." } }`; auth codes are
+`unauthorized`, `forbidden`, and `rate_limited`.
 
 ## Client conventions
 
-- Every `/api` call is authenticated. `/healthz` is the only anonymous call.
+- Every `/api` call requires a bearer token except `/healthz` and the signed
+  OAuth callbacks. `/api/auth/me` verifies the token but skips the invite and
+  budget gates so it can explain why an account is blocked.
 - `401` → force one token refresh, retry once, then `AuthError`.
+- `403` → the account is not invited or its email is unverified.
 - `429` → `Retry-After` is parsed into `ApiError.retryAfter`; never auto-retried.
+  Non-admin budgets are 60 requests/min plus 10 LLM actions/hour.
 - `503` → degraded capability, not a blank page.
 - Timeouts: 15s default, 30s sync/triage/ingest, 60s capture/brief.
 - Durable payloads are validated with Zod. A mismatch throws `ContractError`.
@@ -22,11 +29,16 @@ Errors: `{ "error": { "code": "...", "message": "..." } }`.
 
 ## Endpoints
 
-### Health
+### Health & identity
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/healthz` | `{ok, version, database, anthropic, auth_mode, llm_tokens_available}` |
+| GET | `/healthz` | `{ok, version, database, anthropic, auth_mode, llm_tokens_available}`; `auth_mode` is `firebase\|supabase\|dev\|unconfigured` |
+| GET | `/api/auth/me` | `{user_id, email, name, email_verified, is_admin, allowed, reason, auth_mode}`; `reason` is `email_unverified\|not_invited\|null` |
+
+`/api/auth/me` requires a valid provider token but does not enforce the invite
+list or consume the request budget. The SPA uses it after Firebase sign-in to
+decide between the workspace and the blocked-account panel.
 
 ### Tasks
 

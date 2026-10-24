@@ -24,7 +24,9 @@ pub fn routes() -> Router<Arc<AppState>> {
         .route("/triage/{msg_id}/act", post(act))
 }
 
-fn require_email(state: &AppState) -> AppResult<(&crate::services::email::EmailService, &sqlx::PgPool)> {
+fn require_email(
+    state: &AppState,
+) -> AppResult<(&crate::services::email::EmailService, &sqlx::PgPool)> {
     let svc = state.email.as_ref().ok_or_else(|| {
         AppError::Unavailable(
             "gmail not configured (set GROWTH_GOOGLE_CLIENT_ID/SECRET + GROWTH_TOKEN_ENC_KEY, then consent)"
@@ -49,14 +51,16 @@ async fn run_triage(
     auth: AuthUser,
 ) -> AppResult<Json<TriageRun>> {
     let (svc, pool) = require_email(&state)?;
-    let anthropic = state.anthropic.as_ref().ok_or_else(|| {
-        AppError::Unavailable("email triage needs an Anthropic key".into())
-    })?;
+    let anthropic = state
+        .anthropic
+        .as_ref()
+        .ok_or_else(|| AppError::Unavailable("email triage needs an Anthropic key".into()))?;
+    state.enforce_llm_quota(&auth).await?;
 
     // R4: personal triage rules from the knowledge base (best-effort)
-    let rules = retrieve_triage_rules(&state, &auth.0).await;
+    let rules = retrieve_triage_rules(&state, &auth.id).await;
 
-    let open = svc.triage(pool, &auth.0, anthropic, &rules).await?;
+    let open = svc.triage(pool, &auth.id, anthropic, &rules).await?;
     let stored = open.len();
     Ok(Json(TriageRun { stored, open }))
 }
@@ -90,7 +94,7 @@ async fn list_triage(
              FROM email_triage WHERE user_id = $1
              ORDER BY triaged_at DESC LIMIT 100",
         )
-        .bind(&auth.0)
+        .bind(&auth.id)
         .fetch_all(pool)
         .await
         .map_err(|e| AppError::Database(format!("triage list: {e}")))?;
@@ -98,7 +102,9 @@ async fn list_triage(
     }
 
     let state_val = state_filter.unwrap_or_else(|| "open".into());
-    Ok(Json(crate::services::email::EmailService::list(pool, &auth.0, &state_val).await?))
+    Ok(Json(
+        crate::services::email::EmailService::list(pool, &auth.id, &state_val).await?,
+    ))
 }
 
 #[derive(Debug, Deserialize)]
@@ -116,7 +122,9 @@ async fn act(
     Json(body): Json<ActBody>,
 ) -> AppResult<Json<serde_json::Value>> {
     let (svc, pool) = require_email(&state)?;
-    let result = svc.act(pool, &auth.0, &msg_id, &body.action, body.task_title).await?;
+    let result = svc
+        .act(pool, &auth.id, &msg_id, &body.action, body.task_title)
+        .await?;
     Ok(Json(json!({ "acted": result })))
 }
 
@@ -128,7 +136,16 @@ async fn retrieve_triage_rules(state: &AppState, user_id: &str) -> Vec<String> {
     if !rag.is_ready() {
         return Vec::new();
     }
-    match rag.retrieve(pool, user_id, "email inbox triage rules reply as task ignore", 3, "email").await {
+    match rag
+        .retrieve(
+            pool,
+            user_id,
+            "email inbox triage rules reply as task ignore",
+            3,
+            "email",
+        )
+        .await
+    {
         Ok(hits) => hits.into_iter().map(|h| h.content).collect(),
         Err(e) => {
             tracing::warn!(error = %e, "triage rule retrieval failed — using defaults");

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
+import { authMeSchema } from '@/lib/api/schemas/auth';
 import { captureResponseSchema } from '@/lib/api/schemas/capture';
 import { healthSchema } from '@/lib/api/schemas/health';
 import { storedBriefSchema, briefRefreshResponseSchema } from '@/lib/api/schemas/briefing';
@@ -40,6 +41,21 @@ describe('wire contracts', () => {
 
   it('parses health', () => {
     expect(healthSchema.parse(healthFixture).auth_mode).toBe('dev');
+  });
+
+  it('parses an invite-gated identity response', () => {
+    const me = authMeSchema.parse({
+      user_id: 'firebase-uid',
+      email: 'invited@example.com',
+      name: 'Invited operator',
+      email_verified: false,
+      is_admin: false,
+      allowed: false,
+      reason: 'email_unverified',
+      auth_mode: 'firebase',
+    });
+    expect(me.allowed).toBe(false);
+    expect(me.reason).toBe('email_unverified');
   });
 
   it('parses a stored brief and a refresh response', () => {

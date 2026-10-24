@@ -62,7 +62,7 @@ async fn get_profile(
     auth: AuthUser,
 ) -> AppResult<Json<Profile>> {
     let pool = require_db(&state)?;
-    load_or_default(pool, &auth.0)
+    load_or_default(pool, &auth.id)
         .await
         .map(|p| Json(p))
 }
@@ -92,7 +92,7 @@ async fn put_profile(
              updated_at = NOW()
          RETURNING user_id, name, target_interview_date, focus_areas",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .bind(&name)
     .bind(&body.target_interview_date)
     .bind(&focus_areas)
@@ -144,7 +144,7 @@ async fn onboarding_status(
     let tasks_count: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM tasks WHERE user_id = $1",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_one(pool)
     .await
     .map_err(|e| AppError::Database(format!("onboarding tasks: {e}")))?;
@@ -153,7 +153,7 @@ async fn onboarding_status(
         "SELECT COUNT(*) FROM integrations
          WHERE user_id = $1 AND access_token_enc IS NOT NULL",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_one(pool)
     .await
     .map_err(|e| AppError::Database(format!("onboarding integrations: {e}")))?;
@@ -163,7 +163,7 @@ async fn onboarding_status(
             (SELECT COUNT(*) FROM knowledge_items WHERE user_id = $1),
             (SELECT COUNT(*) FROM dailydev_cache WHERE user_id = $1)",
     )
-    .bind(&auth.0)
+    .bind(&auth.id)
     .fetch_one(pool)
     .await
     .map_err(|e| AppError::Database(format!("onboarding counts: {e}")))?;
@@ -237,7 +237,7 @@ async fn seed(
 ) -> AppResult<Json<SeedResult>> {
     let pool = require_db(&state)?;
     let existing: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE user_id = $1")
-        .bind(&auth.0)
+        .bind(&auth.id)
         .fetch_one(pool)
         .await
         .map_err(|e| AppError::Database(format!("seed check: {e}")))?;
@@ -252,7 +252,7 @@ async fn seed(
             "INSERT INTO tasks (user_id, title, description, priority, source, meta, tags)
              VALUES ($1, $2, $3, $4, 'user', '{\"sample\": true}', '{\"onboarding\"}')",
         )
-        .bind(&auth.0)
+        .bind(&auth.id)
         .bind(title)
         .bind(description)
         .bind(priority)

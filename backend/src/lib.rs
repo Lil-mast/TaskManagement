@@ -7,18 +7,20 @@ use std::sync::Arc;
 
 use axum::http::{header, HeaderValue, Method};
 use axum::Router;
+use core::auth::AuthUser;
 use core::config::Config;
+use core::error::{AppError, AppResult};
 use services::anthropic::{AnthropicClient, AnthropicSettings, DEFAULT_BASE_URL};
 use services::briefing::BriefingService;
-use services::capture::CaptureService;
 use services::calendar::CalendarService;
+use services::capture::CaptureService;
 use services::dailydev::DailyDevClient;
 use services::email::EmailService;
 use services::embeddings::{
-    EmbeddingClient, EmbeddingSettings, DEFAULT_EMBEDDINGS_BASE_URL,
-    DEFAULT_EMBEDDINGS_MODEL,
+    EmbeddingClient, EmbeddingSettings, DEFAULT_EMBEDDINGS_BASE_URL, DEFAULT_EMBEDDINGS_MODEL,
 };
 use services::rag::RagService;
+use services::rate_limit::UserRateLimiter;
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -40,6 +42,10 @@ pub struct AppState {
     pub email: Option<EmailService>,
     /// token-at-rest crypto object shared by integration features
     pub token_crypto: Option<services::crypto::TokenCrypto>,
+    /// per-user general API budget (admins bypass)
+    pub user_limiter: UserRateLimiter,
+    /// per-user budget for expensive LLM / embedding actions
+    pub llm_limiter: UserRateLimiter,
 }
 
 impl AppState {
@@ -48,12 +54,35 @@ impl AppState {
             "db={} anthropic={} dailydev={} rag={} google={} gmail={} auth={}",
             self.db.is_some(),
             self.anthropic.is_some(),
-            self.dailydev.as_ref().map(|d| d.is_configured()).unwrap_or(false),
+            self.dailydev
+                .as_ref()
+                .map(|d| d.is_configured())
+                .unwrap_or(false),
             self.rag.as_ref().map(|r| r.is_ready()).unwrap_or(false),
-            self.calendar.as_ref().map(|c| c.is_configured()).unwrap_or(false),
-            self.email.as_ref().map(|e| e.is_configured()).unwrap_or(false),
-            if self.config.firebase_configured() { "firebase" } else { "dev" }
+            self.calendar
+                .as_ref()
+                .map(|c| c.is_configured())
+                .unwrap_or(false),
+            self.email
+                .as_ref()
+                .map(|e| e.is_configured())
+                .unwrap_or(false),
+            self.config.auth_mode()
         )
+    }
+
+    /// Charge the expensive-action budget. Admins are exempt.
+    pub async fn enforce_llm_quota(&self, auth: &AuthUser) -> AppResult<()> {
+        if auth.is_admin {
+            return Ok(());
+        }
+        self.llm_limiter
+            .check(&auth.id)
+            .await
+            .map_err(|retry_after_secs| AppError::RateLimited {
+                message: format!("LLM quota exhausted; retry in {retry_after_secs} seconds"),
+                retry_after_secs,
+            })
     }
 }
 
@@ -179,10 +208,7 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
         gmail_base_url: services::google::DEFAULT_GMAIL_BASE_URL.into(),
     };
 
-    let calendar = match token_crypto
-        .as_ref()
-        .filter(|_| config.google_configured())
-    {
+    let calendar = match token_crypto.as_ref().filter(|_| config.google_configured()) {
         Some(crypto) => {
             let settings = google_settings(services::google::CALENDAR_SCOPE);
             tracing::info!(
@@ -202,21 +228,34 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
 
     // Gmail read-only triage — same OAuth client, gmail scope; triage itself
     // additionally needs Anthropic (checked per request, like capture).
-    let email = match token_crypto
-        .as_ref()
-        .filter(|_| config.google_configured())
-    {
+    let email = match token_crypto.as_ref().filter(|_| config.google_configured()) {
         Some(crypto) => {
             tracing::info!("gmail triage integration enabled (gmail.readonly)");
             Some(EmailService::new(
-                services::google::GoogleClient::new(google_settings(
-                    services::google::GMAIL_SCOPE,
-                )),
+                services::google::GoogleClient::new(google_settings(services::google::GMAIL_SCOPE)),
                 crypto.clone(),
             ))
         }
         None => None,
     };
+
+    if config.firebase_configured()
+        && config.admin_emails.is_empty()
+        && config.admin_user_ids.is_empty()
+    {
+        tracing::warn!(
+            "Firebase is configured but no admin allowlist is set — all non-dev accounts \
+             will be denied. Set GROWTH_ADMIN_EMAILS or GROWTH_ADMIN_USER_IDS."
+        );
+    }
+    tracing::info!(
+        auth = config.auth_mode(),
+        user_rpm = config.user_rate_limit_rpm,
+        llm_per_hour = config.user_llm_limit_per_hour,
+        admins = config.admin_emails.len() + config.admin_user_ids.len(),
+        invites = config.allowed_emails.len() + config.allowed_user_ids.len(),
+        "access policy loaded"
+    );
 
     Ok(Arc::new(AppState {
         config: config.clone(),
@@ -229,6 +268,8 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
         calendar,
         email,
         token_crypto,
+        user_limiter: UserRateLimiter::per_minute(config.user_rate_limit_rpm),
+        llm_limiter: UserRateLimiter::per_hour(config.user_llm_limit_per_hour),
     }))
 }
 

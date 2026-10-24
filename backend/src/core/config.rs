@@ -29,6 +29,30 @@ pub struct Config {
     pub rate_limit_concurrency: usize,
     #[serde(default = "default_retries")]
     pub max_retries: u32,
+    /// Per-user API budget for non-admin accounts.
+    #[serde(default = "default_user_rpm")]
+    pub user_rate_limit_rpm: u32,
+    /// Per-user budget for expensive LLM/embedding actions.
+    #[serde(default = "default_user_llm_per_hour")]
+    pub user_llm_limit_per_hour: u32,
+    /// Comma-separated verified emails that are admins.
+    #[serde(default, deserialize_with = "csv_list::deserialize")]
+    pub admin_emails: Vec<String>,
+    /// Comma-separated Firebase/Supabase user ids that are admins.
+    #[serde(default, deserialize_with = "csv_list::deserialize")]
+    pub admin_user_ids: Vec<String>,
+    /// Invite-only allowlist by verified email.
+    #[serde(default, deserialize_with = "csv_list::deserialize")]
+    pub allowed_emails: Vec<String>,
+    /// Invite-only allowlist by provider user id.
+    #[serde(default, deserialize_with = "csv_list::deserialize")]
+    pub allowed_user_ids: Vec<String>,
+    /// Reject Firebase accounts whose email is not verified.
+    #[serde(default = "default_true")]
+    pub require_verified_email: bool,
+    /// Local-only escape hatch. Never enable this on a public deployment.
+    #[serde(default)]
+    pub allow_dev_auth: bool,
     #[serde(default)]
     pub firebase_project_id: Option<String>,
     /// Supabase project URL (https://<ref>.supabase.co) — Phase 6 auth
@@ -108,6 +132,37 @@ mod cors_list {
         }
     }
 }
+/// Accepts a TOML-style list or a plain comma-separated env value.
+mod csv_list {
+    use serde::{Deserialize, Deserializer};
+
+    pub fn deserialize<'de, D>(d: D) -> Result<Vec<String>, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        #[serde(untagged)]
+        enum Raw {
+            List(Vec<String>),
+            One(String),
+        }
+
+        match Raw::deserialize(d) {
+            Ok(Raw::List(values)) => Ok(values
+                .into_iter()
+                .map(|value| value.trim().to_string())
+                .filter(|value| !value.is_empty())
+                .collect()),
+            Ok(Raw::One(value)) => Ok(value
+                .split(',')
+                .map(|item| item.trim().to_string())
+                .filter(|item| !item.is_empty())
+                .collect()),
+            Err(error) => Err(error),
+        }
+    }
+}
+
 fn default_max_input_chars() -> usize {
     60_000
 }
@@ -119,6 +174,15 @@ fn default_concurrency() -> usize {
 }
 fn default_retries() -> u32 {
     4
+}
+fn default_user_rpm() -> u32 {
+    60
+}
+fn default_user_llm_per_hour() -> u32 {
+    10
+}
+fn default_true() -> bool {
+    true
 }
 
 impl Default for Config {
@@ -134,6 +198,14 @@ impl Default for Config {
             rate_limit_rpm: 20,
             rate_limit_concurrency: 3,
             max_retries: 4,
+            user_rate_limit_rpm: 60,
+            user_llm_limit_per_hour: 10,
+            admin_emails: Vec::new(),
+            admin_user_ids: Vec::new(),
+            allowed_emails: Vec::new(),
+            allowed_user_ids: Vec::new(),
+            require_verified_email: true,
+            allow_dev_auth: false,
             firebase_project_id: None,
             supabase_url: None,
             supabase_jwt_secret: None,
@@ -216,5 +288,139 @@ impl Config {
                 .as_deref()
                 .map(|p| !p.is_empty())
                 .unwrap_or(false)
+    }
+
+    pub fn auth_mode(&self) -> &'static str {
+        if self.firebase_configured() {
+            "firebase"
+        } else if self.supabase_configured() {
+            "supabase"
+        } else if self.allow_dev_auth {
+            "dev"
+        } else {
+            "unconfigured"
+        }
+    }
+
+    pub fn identity_is_admin(
+        &self,
+        user_id: &str,
+        email: Option<&str>,
+        email_verified: bool,
+    ) -> bool {
+        if self.allow_dev_auth && user_id == "local_dev" {
+            return true;
+        }
+        if self.admin_user_ids.iter().any(|id| id == user_id) {
+            return true;
+        }
+        email
+            .map(|address| {
+                self.admin_emails
+                    .iter()
+                    .any(|allowed| allowed.eq_ignore_ascii_case(address))
+                    && (email_verified || !self.require_verified_email)
+            })
+            .unwrap_or(false)
+    }
+
+    pub fn identity_is_allowed(
+        &self,
+        user_id: &str,
+        email: Option<&str>,
+        email_verified: bool,
+    ) -> bool {
+        if self.identity_is_admin(user_id, email, email_verified) {
+            return true;
+        }
+        if self.allowed_user_ids.iter().any(|id| id == user_id) {
+            return true;
+        }
+        email
+            .map(|address| {
+                self.allowed_emails
+                    .iter()
+                    .any(|allowed| allowed.eq_ignore_ascii_case(address))
+                    && (email_verified || !self.require_verified_email)
+            })
+            .unwrap_or(false)
+    }
+
+    /// Why an authenticated identity is not allowed through the gate.
+    /// `None` means the identity is allowed.
+    pub fn identity_denial_reason(
+        &self,
+        user_id: &str,
+        email: Option<&str>,
+        email_verified: bool,
+    ) -> Option<&'static str> {
+        if self.identity_is_allowed(user_id, email, email_verified) {
+            return None;
+        }
+        let listed_by_email = email
+            .map(|address| {
+                self.admin_emails
+                    .iter()
+                    .chain(self.allowed_emails.iter())
+                    .any(|allowed| allowed.eq_ignore_ascii_case(address))
+            })
+            .unwrap_or(false);
+        if listed_by_email && self.require_verified_email && !email_verified {
+            Some("email_unverified")
+        } else {
+            Some("not_invited")
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn dev_identity_is_only_admin_when_explicitly_enabled() {
+        let mut config = Config::default();
+        assert!(!config.identity_is_admin("local_dev", Some("dev@localhost"), true));
+        config.allow_dev_auth = true;
+        assert!(config.identity_is_admin("local_dev", Some("dev@localhost"), true));
+        assert!(config.identity_is_allowed("local_dev", Some("dev@localhost"), true));
+    }
+
+    #[test]
+    fn email_admin_requires_verification() {
+        let mut config = Config::default();
+        config.admin_emails = vec!["boss@example.com".into()];
+        assert!(!config.identity_is_admin("uid-1", Some("boss@example.com"), false));
+        assert_eq!(
+            config.identity_denial_reason("uid-1", Some("boss@example.com"), false),
+            Some("email_unverified")
+        );
+        assert!(config.identity_is_admin("uid-1", Some("BOSS@example.com"), true));
+    }
+
+    #[test]
+    fn invite_lists_are_enforced_by_email_or_uid() {
+        let mut config = Config::default();
+        config.allowed_emails = vec!["friend@example.com".into()];
+        config.allowed_user_ids = vec!["uid-2".into()];
+
+        assert!(config.identity_is_allowed("uid-1", Some("friend@example.com"), true));
+        assert_eq!(
+            config.identity_denial_reason("uid-1", Some("friend@example.com"), false),
+            Some("email_unverified")
+        );
+        assert!(config.identity_is_allowed("uid-2", None, false));
+        assert_eq!(
+            config.identity_denial_reason("uid-3", Some("stranger@example.com"), true),
+            Some("not_invited")
+        );
+    }
+
+    #[test]
+    fn auth_mode_fails_closed_without_a_provider_or_dev_flag() {
+        let mut config = Config::default();
+        assert_eq!(config.auth_mode(), "unconfigured");
+        config.allow_dev_auth = true;
+        assert_eq!(config.auth_mode(), "dev");
     }
 }

@@ -9,7 +9,12 @@
 //!      source (asymmetric JWKS; legacy HS256 only with the shared secret).
 //!      Supabase is the data plane (Postgres + RLS); its Auth is NOT used.
 //!   3. **Dev fallback** — literal token `"dev"` → `local_dev`; ONLY accepted
-//!      when no identity provider is configured. Never in production.
+//!      when no identity provider is configured AND `GROWTH_ALLOW_DEV_AUTH=true`.
+//!      Never in production.
+//!
+//! After verification, `AuthUser` applies the invite allowlist and the per-user
+//! request budget. `Identity` skips those gates so `/api/auth/me` can explain
+//! *why* a signed-in account is blocked.
 //!
 //! `user_id` on every row is the verified `sub` — request bodies never carry
 //! identity. App-level binding (every query binds the verified uid) is the
@@ -32,15 +37,35 @@ const FIREBASE_JWKS_URL: &str =
 const FIREBASE_ISSUER_PREFIX: &str = "https://securetoken.google.com/";
 const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
-/// Verified user identity for any `/api` route — extract it and you're done:
-/// `async fn handler(auth: AuthUser, ...)`.
+/// A verified provider identity before access-policy checks. `/api/auth/me`
+/// uses this so the SPA can explain *why* an account is blocked.
 #[derive(Debug, Clone)]
-pub struct AuthUser(pub String);
+pub struct Identity {
+    pub id: String,
+    pub email: Option<String>,
+    pub email_verified: bool,
+    pub name: Option<String>,
+}
+
+/// Verified, allowlisted user identity for any `/api` route — extract it and
+/// you're done: `async fn handler(auth: AuthUser, ...)`.
+#[derive(Debug, Clone)]
+pub struct AuthUser {
+    pub id: String,
+    pub email: Option<String>,
+    pub is_admin: bool,
+}
 
 /// Minimal usable token payload for either provider.
 #[derive(Debug, Deserialize)]
 struct Claims {
     sub: String,
+    #[serde(default)]
+    email: Option<String>,
+    #[serde(default)]
+    email_verified: Option<bool>,
+    #[serde(default)]
+    name: Option<String>,
     #[allow(dead_code)]
     aud: serde_json::Value,
     #[allow(dead_code)]
@@ -98,7 +123,9 @@ impl JwksCache {
             for item in items {
                 let jwk: jsonwebtoken::jwk::Jwk = serde_json::from_value(item.clone())
                     .map_err(|e| AppError::Upstream(format!("jwk corrupt: {e}")))?;
-                if let (Ok(key), Some(kid)) = (DecodingKey::from_jwk(&jwk), jwk.common.key_id.clone()) {
+                if let (Ok(key), Some(kid)) =
+                    (DecodingKey::from_jwk(&jwk), jwk.common.key_id.clone())
+                {
                     map.insert(kid, key);
                 }
             }
@@ -126,7 +153,7 @@ async fn cache_for(jwks_url: &str) -> AppResult<Arc<JwksCache>> {
 }
 
 /// Decode + validate one token against a cached JWKS source.
-async fn verify_with_jwks(token: &str, jwks_url: &str, expected_iss: &str) -> AppResult<String> {
+async fn verify_with_jwks(token: &str, jwks_url: &str, expected_iss: &str) -> AppResult<Identity> {
     let header = jsonwebtoken::decode_header(token)
         .map_err(|e| AppError::Unauthorized(format!("malformed token: {e}")))?;
     let kid = header
@@ -148,10 +175,19 @@ async fn verify_with_jwks(token: &str, jwks_url: &str, expected_iss: &str) -> Ap
     if data.claims.sub.is_empty() {
         return Err(AppError::Unauthorized("token without subject".into()));
     }
-    Ok(data.claims.sub)
+    Ok(identity_from_claims(data.claims))
 }
 
-async fn verify_firebase_token(token: &str, project_id: &str) -> AppResult<String> {
+fn identity_from_claims(claims: Claims) -> Identity {
+    Identity {
+        id: claims.sub,
+        email: claims.email.filter(|email| !email.trim().is_empty()),
+        email_verified: claims.email_verified.unwrap_or(false),
+        name: claims.name.filter(|name| !name.trim().is_empty()),
+    }
+}
+
+async fn verify_firebase_token(token: &str, project_id: &str) -> AppResult<Identity> {
     let iss = format!("{FIREBASE_ISSUER_PREFIX}{project_id}");
     verify_with_jwks(token, FIREBASE_JWKS_URL, &iss).await
 }
@@ -160,7 +196,7 @@ async fn verify_supabase_token(
     token: &str,
     origin: &str,
     jwt_secret: Option<&str>,
-) -> AppResult<String> {
+) -> AppResult<Identity> {
     let iss = format!("{origin}/auth/v1");
     let header = jsonwebtoken::decode_header(token)
         .map_err(|e| AppError::Unauthorized(format!("malformed token: {e}")))?;
@@ -169,15 +205,13 @@ async fn verify_supabase_token(
         // Legacy projects: HMAC with the project JWT secret. The secret is
         // project-specific, so possession of *this project's* secret is
         // exactly the trust boundary.
-        let secret = jwt_secret
-            .filter(|s| !s.is_empty())
-            .ok_or_else(|| {
-                AppError::Unauthorized(
-                    "legacy HS256 token — set GROWTH_SUPABASE_JWT_SECRET or migrate the \
+        let secret = jwt_secret.filter(|s| !s.is_empty()).ok_or_else(|| {
+            AppError::Unauthorized(
+                "legacy HS256 token — set GROWTH_SUPABASE_JWT_SECRET or migrate the \
                      project to asymmetric signing keys"
-                        .into(),
-                )
-            })?;
+                    .into(),
+            )
+        })?;
         let mut validation = Validation::new(Algorithm::HS256);
         validation.iss = Some(std::collections::HashSet::from([iss]));
         validation.validate_aud = false;
@@ -191,14 +225,20 @@ async fn verify_supabase_token(
         if data.claims.sub.is_empty() {
             return Err(AppError::Unauthorized("token without subject".into()));
         }
-        return Ok(data.claims.sub);
+        return Ok(identity_from_claims(data.claims));
     }
 
-    verify_with_jwks(token, &format!("{origin}/auth/v1/.well-known/jwks.json"), &iss).await
+    verify_with_jwks(
+        token,
+        &format!("{origin}/auth/v1/.well-known/jwks.json"),
+        &iss,
+    )
+    .await
 }
 
-/// Resolves `AuthUser` from the request (precedence documented at top).
-impl FromRequestParts<Arc<crate::AppState>> for AuthUser {
+/// Resolves the provider identity from the request. This does **not** check the
+/// invite list or rate limit, so `/api/auth/me` can explain a blocked account.
+impl FromRequestParts<Arc<crate::AppState>> for Identity {
     type Rejection = AppError;
 
     async fn from_request_parts(
@@ -220,26 +260,83 @@ impl FromRequestParts<Arc<crate::AppState>> for AuthUser {
                 .firebase_project_id
                 .as_ref()
                 .ok_or_else(|| AppError::Config("firebase project id unset".into()))?;
-            let uid = verify_firebase_token(bearer, project_id).await?;
-            tracing::trace!(user_id = %uid, "authenticated via firebase");
-            return Ok(AuthUser(uid));
+            let identity = verify_firebase_token(bearer, project_id).await?;
+            tracing::trace!(user_id = %identity.id, "authenticated via firebase");
+            return Ok(identity);
         }
 
         if config.supabase_configured() {
             let origin = config.supabase_origin().unwrap_or_default();
-            let uid =
-                verify_supabase_token(bearer, origin, config.supabase_jwt_secret.as_deref()).await?;
-            tracing::trace!(user_id = %uid, "authenticated via supabase");
-            return Ok(AuthUser(uid));
+            let identity =
+                verify_supabase_token(bearer, origin, config.supabase_jwt_secret.as_deref())
+                    .await?;
+            tracing::trace!(user_id = %identity.id, "authenticated via supabase");
+            return Ok(identity);
         }
 
-        if bearer == "dev" {
+        if bearer == "dev" && config.allow_dev_auth {
             tracing::warn!("auth running in DEV mode: token 'dev' accepted as local_dev");
-            return Ok(AuthUser("local_dev".to_string()));
+            return Ok(Identity {
+                id: "local_dev".to_string(),
+                email: Some("dev@localhost".to_string()),
+                email_verified: true,
+                name: Some("Local operator".to_string()),
+            });
         }
+
         Err(AppError::Unauthorized(
-            "dev fallback requires the token literal \"dev\" (no identity provider configured)"
+            "no identity provider configured (set GROWTH_FIREBASE_PROJECT_ID or enable \
+             GROWTH_ALLOW_DEV_AUTH for local use)"
                 .into(),
         ))
+    }
+}
+
+/// Resolves an allowlisted, rate-limited `AuthUser`.
+impl FromRequestParts<Arc<crate::AppState>> for AuthUser {
+    type Rejection = AppError;
+
+    async fn from_request_parts(
+        parts: &mut Parts,
+        state: &Arc<crate::AppState>,
+    ) -> Result<Self, Self::Rejection> {
+        let identity = Identity::from_request_parts(parts, state).await?;
+        let config = &state.config;
+        let is_admin = config.identity_is_admin(
+            &identity.id,
+            identity.email.as_deref(),
+            identity.email_verified,
+        );
+
+        if let Some(reason) = config.identity_denial_reason(
+            &identity.id,
+            identity.email.as_deref(),
+            identity.email_verified,
+        ) {
+            let message = match reason {
+                "email_unverified" => "verify your email before using the workspace",
+                _ => "this account is not on the invite list",
+            };
+            return Err(AppError::Forbidden(message.into()));
+        }
+
+        if !is_admin {
+            state
+                .user_limiter
+                .check(&identity.id)
+                .await
+                .map_err(|retry_after_secs| AppError::RateLimited {
+                    message: format!(
+                        "request budget exhausted; retry in {retry_after_secs} seconds"
+                    ),
+                    retry_after_secs,
+                })?;
+        }
+
+        Ok(AuthUser {
+            id: identity.id,
+            email: identity.email,
+            is_admin,
+        })
     }
 }

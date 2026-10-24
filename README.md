@@ -52,8 +52,9 @@ flowchart LR
 
 - **SPA:** React 18, TypeScript, Vite, TanStack Query, Zod at the network boundary.
 - **API:** Rust, Axum, sqlx, Postgres/pgvector.
-- **Auth:** Firebase ID tokens in production; the literal dev token locally when
-  no identity provider is configured.
+- **Auth:** Firebase ID tokens in production, verified against Google's JWKS.
+  Accounts are invite-only; the admin allowlist bypasses per-user budgets. The
+  literal dev token is local-only and requires `GROWTH_ALLOW_DEV_AUTH=true`.
 - **No secrets in the SPA.** The browser only holds the API URL and the auth
   provider's public config.
 
@@ -67,7 +68,8 @@ The core daily loop is live:
 
 - `/` — public landing page with the real capability story.
 - `/login` — sign-in and create-account flow. Firebase mode uses Google or
-  email/password; local dev-token mode uses an explicit local session.
+  email/password, verifies email addresses, and blocks accounts that are not on
+  the invite list. Local dev-token mode uses an explicit local session.
 - `/onboarding` — four-step calibration for profile, signals, starting tasks,
   and the first brief. Every step is skippable and the flow can be reopened.
 - `/brief` — the signed-in workspace: real open tasks, a real daily brief when
@@ -122,12 +124,17 @@ GROWTH_ANTHROPIC_API_KEY=sk-ant-...
 GROWTH_CORS_ORIGINS=http://localhost:5173
 ```
 
-For **local dev-token auth**, leave the identity provider blank:
+For **local dev-token auth**, leave the identity provider blank and opt in
+explicitly:
 
 ```dotenv
 GROWTH_FIREBASE_PROJECT_ID=
 GROWTH_SUPABASE_URL=
+GROWTH_ALLOW_DEV_AUTH=true
 ```
+
+Without `GROWTH_ALLOW_DEV_AUTH=true`, the backend fails closed and rejects
+`Bearer dev` with `401`.
 
 > **Important:** the example file contains the placeholder
 > `GROWTH_FIREBASE_PROJECT_ID=<your-firebase-project-id>`. That placeholder is a
@@ -196,11 +203,49 @@ same screen offers Google and email/password sign-in or account creation.
 
 | Mode | Backend | Frontend |
 |---|---|---|
-| **Local dev token** | No Firebase/Supabase configured. `Bearer dev` maps to `local_dev`. | `VITE_AUTH_MODE=dev` |
+| **Local dev token** | No Firebase/Supabase configured and `GROWTH_ALLOW_DEV_AUTH=true`. `Bearer dev` maps to `local_dev`. | `VITE_AUTH_MODE=dev` |
 | **Firebase** | `GROWTH_FIREBASE_PROJECT_ID` set to a real project ID. | `VITE_AUTH_MODE=firebase` plus all `VITE_FIREBASE_*` values. |
+| **Unconfigured** | No provider and `GROWTH_ALLOW_DEV_AUTH=false`. Every `/api` call is `401`. | Login shows the unconfigured notice. |
 
 Do not mix them. If the backend has a Firebase project configured, a `dev`
-bearer token will be rejected with `401`.
+bearer token will be rejected with `401`. If neither provider nor the dev flag
+is configured, every `/api` route fails closed with `401`.
+
+### Invite-only access and budgets
+
+The admin allowlist is the only way in. Everyone else must be explicitly
+invited by email or provider UID:
+
+```dotenv
+# Your account — exempt from the per-user budgets.
+GROWTH_ADMIN_EMAILS=you@example.com
+# Optional: add your Firebase UID as a second admin key.
+GROWTH_ADMIN_USER_IDS=
+
+# Invited operators.
+GROWTH_ALLOWED_EMAILS=teammate@example.com,another@example.com
+GROWTH_ALLOWED_USER_IDS=
+
+# Require Firebase email verification before an email allowlist entry applies.
+GROWTH_REQUIRE_VERIFIED_EMAIL=true
+
+# Non-admin budgets (token buckets, per process).
+GROWTH_USER_RATE_LIMIT_RPM=60
+GROWTH_USER_LLM_LIMIT_PER_HOUR=10
+```
+
+- `60 req/min` covers all authenticated `/api` calls per user.
+- `10/hour` covers the expensive actions: capture, brief refresh, email triage,
+  weekly review generation, and knowledge ingest/search.
+- Admins bypass both budgets.
+- Email allowlist entries require a verified Firebase email unless
+  `GROWTH_REQUIRE_VERIFIED_EMAIL=false`. UID entries do not.
+- The SPA calls `GET /api/auth/me` after sign-in. An unverified or uninvited
+  account sees the reason on `/login` and can resend verification or sign out.
+- The limiter is in-process. A multi-instance deployment needs a shared store
+  (for example Redis) before these numbers mean anything globally.
+- Allowlists are environment configuration; restart the backend after changing
+  them.
 
 For Firebase: create a web app in the Firebase console, enable the sign-in
 providers you want, add `localhost` as an authorized domain, then copy the web
@@ -215,6 +260,10 @@ VITE_FIREBASE_STORAGE_BUCKET=
 VITE_FIREBASE_MESSAGING_SENDER_ID=
 VITE_FIREBASE_APP_ID=
 ```
+
+Then set the backend's `GROWTH_FIREBASE_PROJECT_ID` to the same project and add
+your verified email to `GROWTH_ADMIN_EMAILS`. Without an admin allowlist entry,
+even a valid Firebase account is denied (`not_invited`).
 
 ### Optional integrations
 
@@ -250,6 +299,10 @@ curl -s http://localhost:8000/healthz
 # Authenticated read in dev-token mode
 curl -s -H 'Authorization: Bearer dev' \
   'http://localhost:8000/api/tasks?status=open'
+
+# Identity / access gate
+curl -s -H 'Authorization: Bearer dev' \
+  'http://localhost:8000/api/auth/me'
 
 # SPA checks
 pnpm typecheck
