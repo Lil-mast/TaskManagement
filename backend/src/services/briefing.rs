@@ -508,8 +508,34 @@ impl BriefingService {
             .find(|t| t.name == "compose_brief")
             .ok_or_else(|| AppError::Upstream("claude sent no compose_brief tool call".into()))?;
 
-        let payload: BriefPayload = serde_json::from_value(tool_use.input.clone())
+        let mut payload: BriefPayload = serde_json::from_value(tool_use.input.clone())
             .map_err(|e| AppError::Upstream(format!("compose_brief invalid: {e}")))?;
+
+        // Keep the drill inside the contract the UI validates even if the
+        // model returns a near-miss (capitalised difficulty, tiny timer, etc.).
+        if let Some(challenge) = payload.leetcode.challenge.as_mut() {
+            challenge.difficulty = match challenge.difficulty.trim().to_ascii_lowercase().as_str() {
+                "easy" => "easy".into(),
+                "hard" => "hard".into(),
+                _ => "medium".into(),
+            };
+            challenge.time_limit_min = challenge.time_limit_min.clamp(10, 45);
+            let pattern = if challenge.pattern.trim().is_empty() {
+                "DSA".to_string()
+            } else {
+                challenge.pattern.trim().to_string()
+            };
+            challenge.pattern = pattern.clone();
+            if challenge.title.trim().is_empty() {
+                challenge.title = format!("{pattern} drill");
+            }
+            if challenge.language.trim().is_empty() {
+                challenge.language = "TypeScript".into();
+            }
+            if challenge.code.trim().is_empty() {
+                challenge.code = "// Reference code unavailable.".into();
+            }
+        }
 
         // 4. persist (upsert — refresh replaces today's row)
         let stored = sqlx::query_as::<_, StoredBrief>(
