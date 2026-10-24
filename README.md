@@ -16,7 +16,7 @@ you accept, edit, or dismiss it.
 
 | Surface | The question it answers |
 |---|---|
-| **Brief** | *What deserves today?* One headline, a short priority list with a reason per item, a watchlist, and a timed DSA drill with hints and a reference answer. |
+| **Brief** | *What deserves today?* One headline, a short priority list with a reason per item, a watchlist, a Tech Radar feed, and a timed DSA drill with hints and a reference answer. |
 | **Tasks** | *What did I decide to move?* One priority axis: `now`, `schedule`, `delegate`, `drop`. |
 | **Capture** | *What am I carrying around in my head?* Type natural language; MrT returns discrete proposals, never silent writes. |
 | **Calendar** | *Where does it fit?* Real gaps in the week, plus schedule suggestions that remain proposals. |

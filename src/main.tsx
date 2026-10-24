@@ -16,6 +16,7 @@ import './styles/landing.css';
 import './styles/login.css';
 import './styles/workspace.css';
 import './styles/drill.css';
+import './styles/radar.css';
 import './styles/tasks.css';
 import './styles/overlays.css';
 import './styles/capture.css';

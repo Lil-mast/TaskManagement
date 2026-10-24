@@ -4,6 +4,7 @@ import { format, parseISO } from 'date-fns';
 import { Link } from 'react-router-dom';
 
 import { DailyDrill } from '@/components/DailyDrill';
+import { TechRadar } from '@/components/TechRadar';
 import { ApiError, briefingApi, tasksApi } from '@/lib/api';
 import type { CreateTaskInput, Priority } from '@/lib/api/schemas/common';
 import { useSession } from '@/lib/auth/session';
@@ -392,6 +393,8 @@ export function BriefScreen() {
                 </p>
               ) : null}
             </section>
+
+            <TechRadar />
 
             <section className="panel panel--ink brief-rule" aria-label="The product rule">
               <p className="mono-label">THE RULE</p>
