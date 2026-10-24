@@ -43,7 +43,9 @@ describe('wire contracts', () => {
   });
 
   it('parses a stored brief and a refresh response', () => {
-    expect(storedBriefSchema.parse(briefFixture).payload.priorities).toHaveLength(1);
+    const brief = storedBriefSchema.parse(briefFixture);
+    expect(brief.payload.priorities).toHaveLength(1);
+    expect(brief.payload.leetcode.challenge?.time_limit_min).toBe(25);
     expect(
       briefRefreshResponseSchema.parse({ refreshed: true, brief: briefFixture.payload }).brief.headline,
     ).toContain('deep-work');

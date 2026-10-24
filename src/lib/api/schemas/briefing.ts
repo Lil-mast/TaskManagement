@@ -18,10 +18,39 @@ export const briefWatchItemSchema = z
   })
   .passthrough();
 
+export const challengeExampleSchema = z
+  .object({
+    input: z.string(),
+    output: z.string(),
+    explanation: z.string().nullable().optional(),
+  })
+  .passthrough();
+
+export const dailyChallengeSchema = z
+  .object({
+    title: z.string(),
+    difficulty: z.enum(['easy', 'medium', 'hard']),
+    pattern: z.string(),
+    time_limit_min: z.number().int().min(1).max(120),
+    prompt: z.string(),
+    examples: z.array(challengeExampleSchema).default([]),
+    constraints: z.array(z.string()).default([]),
+    hints: z.array(z.string()).default([]),
+    approach: z.string(),
+    complexity: z.string(),
+    code: z.string(),
+    language: z.string(),
+  })
+  .passthrough();
+
+export type DailyChallenge = z.infer<typeof dailyChallengeSchema>;
+export type ChallengeExample = z.infer<typeof challengeExampleSchema>;
+
 export const briefLeetCodeSchema = z
   .object({
     pattern: z.string().nullable().optional(),
     note: z.string().nullable().optional(),
+    challenge: dailyChallengeSchema.nullable().optional(),
   })
   .passthrough();
 

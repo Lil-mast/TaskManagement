@@ -3,9 +3,11 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { Link } from 'react-router-dom';
 
+import { DailyDrill } from '@/components/DailyDrill';
 import { ApiError, briefingApi, tasksApi } from '@/lib/api';
 import type { CreateTaskInput, Priority } from '@/lib/api/schemas/common';
 import { useSession } from '@/lib/auth/session';
+import { offlineDrillForDate } from '@/lib/daily-drill';
 import { invalidation, queryKeys } from '@/lib/query/keys';
 
 const dateLabel = format(new Date(), 'EEE dd MMM').toUpperCase();
@@ -86,8 +88,17 @@ export function BriefScreen() {
   }, [openTasks]);
 
   const payload = hasTasks ? brief.data?.payload : undefined;
+  const aiChallenge = payload?.leetcode.challenge;
+  const drillChallenge =
+    aiChallenge ?? (brief.isLoading ? null : offlineDrillForDate(brief.data?.brief_date));
+  const drillSource = aiChallenge ? 'ai' : 'offline';
   const priorityCount = payload?.priorities.length ?? 0;
-  const drill = payload?.leetcode.pattern ?? 'None due';
+  const drill = drillChallenge?.pattern ?? 'None due';
+  const drillNote = aiChallenge
+    ? payload?.leetcode.note ?? 'AI-generated practice for today'
+    : drillChallenge
+      ? 'Saved drill · AI unavailable'
+      : 'No drill today';
   const firstName = (user?.name ?? user?.email ?? 'operator').split(/[ @]/)[0];
 
   function addTask(event: FormEvent<HTMLFormElement>) {
@@ -168,11 +179,17 @@ export function BriefScreen() {
           <article className="metric metric--ink">
             <span className="metric__label">DRILL</span>
             <span className="metric__value metric__value--small">{drill}</span>
-            <span className="metric__note">
-              {payload?.leetcode.note ?? 'No pattern due today'}
-            </span>
+            <span className="metric__note">{drillNote}</span>
           </article>
         </section>
+
+        {drillChallenge ? (
+          <DailyDrill
+            key={`${drillChallenge.pattern}-${drillChallenge.title}`}
+            challenge={drillChallenge}
+            source={drillSource}
+          />
+        ) : null}
 
         <div className="brief-grid">
           <section className="panel brief-panel" aria-label="Today's brief">

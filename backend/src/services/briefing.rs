@@ -34,9 +34,41 @@ pub struct BriefWatchItem {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ChallengeExample {
+    pub input: String,
+    pub output: String,
+    #[serde(default)]
+    pub explanation: Option<String>,
+}
+
+/// One original DSA drill attached to the daily brief. This is practice
+/// material, not a task and not a claim that it is a real LeetCode problem.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyChallenge {
+    pub title: String,
+    pub difficulty: String,
+    pub pattern: String,
+    pub time_limit_min: u32,
+    pub prompt: String,
+    #[serde(default)]
+    pub examples: Vec<ChallengeExample>,
+    #[serde(default)]
+    pub constraints: Vec<String>,
+    #[serde(default)]
+    pub hints: Vec<String>,
+    pub approach: String,
+    pub complexity: String,
+    pub code: String,
+    pub language: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BriefLeetCode {
     pub pattern: Option<String>,
     pub note: Option<String>,
+    /// Optional so briefs composed before the drill existed still parse.
+    #[serde(default)]
+    pub challenge: Option<DailyChallenge>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,16 +111,27 @@ Rules:
    stack, and learning goals. For each: verdict = is it worth their time
    (concrete reason or "skip-worthy" arrows).
 3. `leetcode`: pick the pattern to drill today from the LEETCODE_DUE list
-   (weakest confidence + most overdue first). Empty list → drill: null.
+   (weakest confidence + most overdue first), or a foundational pattern from
+   PROFILE when the list is empty. Set `leetcode.pattern` to that name and
+   `leetcode.note` to one sentence explaining why it matters today. Then
+   generate ONE original DSA practice drill for the pattern inside
+   `leetcode.challenge`. It is practice, not a task. The drill must be
+   self-contained: `title`, `difficulty` (easy|medium|hard), `pattern`,
+   `time_limit_min` (15–30), `prompt`, 1–3 `examples` with input/output,
+   2–5 `constraints`, 2–3 progressive `hints` that do not give away the
+   whole solution, an `approach`, `complexity`, and a correct reference
+   solution in TypeScript (`code`, `language`: "TypeScript"). Do not reuse a
+   real LeetCode title or URL; this is a fresh problem, not a copied one.
 4. `priorities` must fit around the CALENDAR blocks: a packed-meeting day
    means fewer, sharper priorities; open a cleared afternoon means deep work.
 5. `principles_used`: the `[source_ref]`s of PRINCIPLES that genuinely shaped
    your advice. Only what you used — do not pad the list, and never invent
    sources.
-6. Never invent tasks, posts, patterns, or events — the grounding is
-   authoritative. INBOX_PULSE numbers are fact: if reply/task counts are
-   non-zero the headline may call them out, using the same numbers exactly,
-   but never as a `priorities` entry (only tasks may appear there).
+6. Never invent tasks, posts, or events — the grounding is authoritative. The
+   drill problem is the one original artifact you may create. INBOX_PULSE
+   numbers are fact: if reply/task counts are non-zero the headline may call
+   them out, using the same numbers exactly, but never as a `priorities` entry
+   (only tasks may appear there).
 7. headline: one sharp sentence (max 90 chars) characterizing the day.
 8. Answer with exactly ONE `compose_brief` tool call."#;
 
@@ -284,8 +327,36 @@ impl BriefingService {
                 }},
                 "leetcode":       { "type": "object", "properties": {
                     "pattern": { "type": "string" },
-                    "note":    { "type": "string" }
-                }},
+                    "note":    { "type": "string" },
+                    "challenge": {
+                        "type": "object",
+                        "properties": {
+                            "title":     { "type": "string" },
+                            "difficulty": { "type": "string", "enum": ["easy", "medium", "hard"] },
+                            "pattern":   { "type": "string" },
+                            "time_limit_min": { "type": "integer", "minimum": 15, "maximum": 30 },
+                            "prompt":    { "type": "string" },
+                            "examples":  { "type": "array", "minItems": 1, "maxItems": 3, "items": {
+                                "type": "object",
+                                "properties": {
+                                    "input":       { "type": "string" },
+                                    "output":      { "type": "string" },
+                                    "explanation": { "type": "string" }
+                                },
+                                "required": ["input", "output"]
+                            }},
+                            "constraints": { "type": "array", "minItems": 2, "maxItems": 5, "items": { "type": "string" } },
+                            "hints":       { "type": "array", "minItems": 2, "maxItems": 3, "items": { "type": "string" } },
+                            "approach":    { "type": "string" },
+                            "complexity":  { "type": "string" },
+                            "code":        { "type": "string" },
+                            "language":    { "type": "string" }
+                        },
+                        "required": ["title", "difficulty", "pattern", "time_limit_min",
+                                     "prompt", "examples", "constraints", "hints",
+                                     "approach", "complexity", "code", "language"]
+                    }
+                }, "required": ["pattern", "note", "challenge"]},
                 "principles_used": { "type": "array", "items": { "type": "string" } },
                 "compose_log":     { "type": "string" }
             }),
@@ -317,7 +388,24 @@ impl BriefingService {
             .await
             .map_err(|e| AppError::Database(format!("briefing read: {e}")))?
             {
-                return Ok(existing);
+                let has_drill = existing
+                    .payload
+                    .pointer("/leetcode/challenge")
+                    .map(|value| !value.is_null())
+                    .unwrap_or(false);
+                if has_drill {
+                    return Ok(existing);
+                }
+                // Upgrade a brief composed before the daily drill existed.
+                // If the recompose fails, keep serving the old brief.
+                tracing::info!(user_id, "today's brief has no drill — recomposing");
+                return match self.compose(pool, user_id, today).await {
+                    Ok(fresh) => Ok(fresh),
+                    Err(error) => {
+                        tracing::warn!(%error, "daily drill recompose failed — serving existing brief");
+                        Ok(existing)
+                    }
+                };
             }
         }
         self.compose(pool, user_id, today).await
