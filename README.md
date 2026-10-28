@@ -1,4 +1,4 @@
-# MrT — Daily Intelligence
+# MrT | Daily Intelligence
 
 > **MrT proposes. You decide.**
 
