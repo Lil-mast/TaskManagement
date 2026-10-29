@@ -1,0 +1,33 @@
+version: 1
+frontend:
+  phases:
+    preBuild:
+      commands:
+        # Install pnpm at the exact version the project requires
+        - npm install -g pnpm@12.4.1
+        - pnpm install --frozen-lockfile
+    build:
+      commands:
+        - pnpm typecheck
+        - pnpm build
+  artifacts:
+    # Vite outputs to dist/
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths:
+      # Cache node_modules so repeated builds are faster
+      - node_modules/**/*
+      - ~/.pnpm-store/**/*
+
+  # SPA redirect rule — send all routes to index.html so React Router works
+  customHeaders:
+    - pattern: '**/*'
+      headers:
+        - key: 'Cache-Control'
+          value: 'public, max-age=0, must-revalidate'
+    - pattern: 'assets/**/*'
+      headers:
+        - key: 'Cache-Control'
+          value: 'public, max-age=31536000, immutable'

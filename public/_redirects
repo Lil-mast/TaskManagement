@@ -1,0 +1,3 @@
+# SPA fallback — Amplify and Netlify: send all unmatched routes to index.html
+# so React Router can handle /brief, /tasks, /capture, etc. client-side.
+/*    /index.html    200

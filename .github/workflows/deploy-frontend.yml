@@ -1,53 +1,48 @@
 name: Deploy Frontend to AWS Amplify
 
-# Trigger this workflow on push to main branch
+# Amplify Console watches the main branch directly and deploys automatically.
+# This workflow runs type-checking and a build verification on every push/PR
+# so failures are caught in CI before Amplify picks up the commit.
+
 on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
 
 jobs:
-  deploy:
+  verify:
+    name: Type-check & build
     runs-on: ubuntu-latest
-    
+
     steps:
-      # 1. Checkout the code
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # 2. Set up Node.js with Node 22.x
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          # Enable pnpm caching for faster builds
-          cache: 'pnpm'
-
-      # 3. Install pnpm 12.4.1 specifically
       - name: Install pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 12.4.1
-          run_install: true
 
-      # 4. Install dependencies using pnpm
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      # 5. Run type checking (optional but recommended before build)
       - name: Type check
         run: pnpm typecheck
 
-      # 6. Build the frontend React SPA with Vite
-      # Environment variables are passed here for the build
-      - name: Build frontend
+      - name: Build (dry run — uses placeholder env vars)
         run: pnpm build
         env:
-          # Base URL for API calls in the built application
-          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL || 'https://api.example.com' }}
-          # Authentication configuration
-          VITE_AUTH_MODE: ${{ secrets.VITE_AUTH_MODE || 'production' }}
-          # Firebase configuration (if needed)
+          VITE_API_BASE_URL: ${{ secrets.VITE_API_BASE_URL }}
+          VITE_AUTH_MODE: firebase
           VITE_FIREBASE_API_KEY: ${{ secrets.VITE_FIREBASE_API_KEY }}
           VITE_FIREBASE_AUTH_DOMAIN: ${{ secrets.VITE_FIREBASE_AUTH_DOMAIN }}
           VITE_FIREBASE_PROJECT_ID: ${{ secrets.VITE_FIREBASE_PROJECT_ID }}
@@ -55,40 +50,6 @@ jobs:
           VITE_FIREBASE_MESSAGING_SENDER_ID: ${{ secrets.VITE_FIREBASE_MESSAGING_SENDER_ID }}
           VITE_FIREBASE_APP_ID: ${{ secrets.VITE_FIREBASE_APP_ID }}
 
-      # 7. Deploy to AWS Amplify using the AWS Amplify CLI
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          # AWS credentials stored in GitHub Secrets
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: us-east-1  # Change to your Amplify region if needed
-
-      # 8. Deploy to Amplify using the CLI
-      - name: Deploy to AWS Amplify
-        run: |
-          # Install Amplify CLI if not already available
-          npm install -g @aws-amplify/cli
-          
-          # Deploy the dist/ directory to Amplify
-          # AMPLIFY_APP_ID and AMPLIFY_BRANCH should be set in GitHub Secrets
-          amplify publish \
-            --appId ${{ secrets.AMPLIFY_APP_ID }} \
-            --branch ${{ secrets.AMPLIFY_BRANCH }} \
-            --envName prod \
-            --yes
-        env:
-          CI: true
-
-      # 9. Deployment success notification
-      - name: Deployment Success
-        if: success()
-        run: echo "✅ Frontend deployed successfully to AWS Amplify!"
-
-      # 10. Deployment failure notification
-      - name: Deployment Failure
-        if: failure()
-        run: |
-          echo "❌ Frontend deployment to AWS Amplify failed!"
-          echo "Check the logs above for details."
-        shell: bash
+      - name: ✅ Build passed — Amplify Console will deploy automatically
+        if: success() && github.ref == 'refs/heads/main'
+        run: echo "Build verified. Amplify Console watches main and deploys on its own."
