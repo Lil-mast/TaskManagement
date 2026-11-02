@@ -8,6 +8,10 @@ import type { TaskStatus } from '@/lib/api/schemas/common';
 export const queryKeys = {
   health: ['health'] as const,
 
+  inspiration: {
+    daily: ['inspiration', 'daily'] as const,
+  },
+
   tasks: {
     all: ['tasks'] as const,
     list: (status: TaskStatus) => ['tasks', status] as const,

@@ -19,6 +19,7 @@ export { profileApi } from './endpoints/profile';
 export { onboardingApi } from './endpoints/onboarding';
 export { integrationsApi } from './endpoints/integrations';
 export { knowledgeApi } from './endpoints/knowledge';
+export { booksApi } from './endpoints/books';
 
 export * from './schemas/common';
 export * from './schemas/auth';
@@ -33,3 +34,4 @@ export * from './schemas/profile';
 export * from './schemas/onboarding';
 export * from './schemas/integrations';
 export * from './schemas/knowledge';
+export * from './schemas/books';

@@ -1,8 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 
+import { BooksInspirationCard } from '@/components/BooksInspirationCard';
 import { Wordmark } from '@/components/Wordmark';
-import { healthApi } from '@/lib/api';
+import { booksApi, healthApi } from '@/lib/api';
 import { queryKeys } from '@/lib/query/keys';
 
 const today = new Intl.DateTimeFormat('en-GB', {
@@ -23,6 +24,13 @@ export function LandingScreen({ onReplayIntro }: LandingScreenProps) {
     queryFn: ({ signal }) => healthApi.get(signal),
     retry: false,
     staleTime: 60_000,
+  });
+
+  const inspiration = useQuery({
+    queryKey: queryKeys.inspiration.daily,
+    queryFn: ({ signal }) => booksApi.getDailyInspiration(signal),
+    retry: false,
+    staleTime: 3600_000, // 1 hour
   });
 
   const status = health.isPending ? 'CHECKING' : health.isSuccess ? 'SYSTEM OK' : 'OFFLINE';
@@ -70,7 +78,7 @@ export function LandingScreen({ onReplayIntro }: LandingScreenProps) {
 
             <div className="landing__hero-row">
               <p className="landing__lede">
-                MrT reads the signals around you — tasks, calendar, inbox, reading, practice —
+                MrT reads the signals around you, tasks, calendar, inbox, reading, practice,
                 and proposes one clear brief. Nothing moves until you say so.
               </p>
               <div className="landing__actions">
@@ -148,7 +156,7 @@ export function LandingScreen({ onReplayIntro }: LandingScreenProps) {
               <h2>Plan</h2>
               <p>
                 Your real calendar, inbox, and practice history become the grounding. The brief
-                names the few things worth doing — not a wall of widgets.
+                names the few things worth doing, not a wall of widgets.
               </p>
               <span className="proof__tag">BRIEF</span>
             </article>
@@ -163,6 +171,35 @@ export function LandingScreen({ onReplayIntro }: LandingScreenProps) {
               <span className="proof__tag">REVIEW</span>
             </article>
           </div>
+        </section>
+
+        <section className="landing__inspiration">
+          <header className="section-head">
+            <span>02 / DAILY PRINCIPLE</span>
+            <span>FROM THE LIBRARY</span>
+          </header>
+
+          {inspiration.data ? (
+            <BooksInspirationCard
+              inspiration={inspiration.data}
+              alternatives={inspiration.data.alternatives}
+              isLoading={inspiration.isPending}
+              isError={inspiration.isError}
+            />
+          ) : (
+            <BooksInspirationCard
+              inspiration={{
+                book: '',
+                chapter: undefined,
+                idea: '',
+                application: undefined,
+                tags: [],
+              }}
+              alternatives={[]}
+              isLoading={inspiration.isPending}
+              isError={inspiration.isError}
+            />
+          )}
         </section>
 
         <section className="landing__creed">

@@ -1,0 +1,82 @@
+[
+  {
+    "book": "Atomic Habits",
+    "chapter": "Chapter 1: The Surprising Power of Atomic Habits",
+    "idea": "You do not rise to the level of your goals. You fall to the level of your systems.",
+    "application": "Review your daily routines and identify one system to improve today.",
+    "tags": ["habits", "systems", "improvement"],
+    "weight": 1.2
+  },
+  {
+    "book": "Deep Work",
+    "chapter": "Part 1: Fundamentals",
+    "idea": "The ability to perform deep work is becoming increasingly rare at exactly the moment it is becoming increasingly valuable in our economy.",
+    "application": "Block 90 minutes today for focused, distraction-free work on your most important task.",
+    "tags": ["focus", "productivity", "deep-work"],
+    "weight": 1.1
+  },
+  {
+    "book": "The 7 Habits of Highly Effective People",
+    "chapter": "Habit 2: Begin with the End in Mind",
+    "idea": "To know where you are going, you must know where you are now.",
+    "application": "Write down one goal you want to achieve this quarter and work backwards to today's action.",
+    "tags": ["goals", "vision", "planning"],
+    "weight": 0.9
+  },
+  {
+    "book": "Thinking, Fast and Slow",
+    "chapter": "Part I: Two Systems of Thought",
+    "idea": "System 1 is automatic and fast, while System 2 is deliberate and slow. Most mistakes come from not engaging System 2.",
+    "application": "For one important decision today, slow down and write out both sides before deciding.",
+    "tags": ["decision-making", "thinking", "bias"],
+    "weight": 1.0
+  },
+  {
+    "book": "Meditations",
+    "chapter": "Book II",
+    "idea": "You have power over your mind—not outside events. Realize this, and you will find strength.",
+    "application": "When facing a challenge today, pause and ask: what can I actually control here?",
+    "tags": ["stoicism", "mindset", "control"],
+    "weight": 0.95
+  },
+  {
+    "book": "The Lean Startup",
+    "chapter": "Chapter 1: Start",
+    "idea": "The goal of a startup is to figure out the right thing to build—the thing customers actually want—as quickly as possible.",
+    "application": "Today, validate one assumption about your current work with real feedback from someone who knows.",
+    "tags": ["validation", "learning", "startup"],
+    "weight": 1.05
+  },
+  {
+    "book": "Man's Search for Meaning",
+    "chapter": "Part One",
+    "idea": "Those who have a 'why' to live can bear with almost any 'how'.",
+    "application": "Reflect on the deeper purpose behind today's work. What meaning does it have?",
+    "tags": ["meaning", "purpose", "resilience"],
+    "weight": 1.15
+  },
+  {
+    "book": "The Courage to Be Disliked",
+    "chapter": "First Night",
+    "idea": "You are not responsible for the results. You are responsible for the effort.",
+    "application": "Focus on taking one clear action today rather than worrying about the outcome.",
+    "tags": ["psychology", "acceptance", "action"],
+    "weight": 0.85
+  },
+  {
+    "book": "Radical Candor",
+    "chapter": "Chapter 1: A New Approach",
+    "idea": "Care personally, challenge directly—the balance between warmth and directness creates the foundation for great relationships.",
+    "application": "In your next team interaction, be both kind and honest about what you see.",
+    "tags": ["communication", "leadership", "feedback"],
+    "weight": 1.1
+  },
+  {
+    "book": "Why We Sleep",
+    "chapter": "Chapter 1: Sleep Loss and the Brain",
+    "idea": "Sleep is not a luxury—it is a biological necessity that directly impacts memory, decision-making, and health.",
+    "application": "Plan your sleep tonight. What time will you be in bed?",
+    "tags": ["health", "biology", "sleep"],
+    "weight": 0.9
+  }
+]

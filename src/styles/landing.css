@@ -204,6 +204,11 @@
   scroll-margin-top: 1rem;
 }
 
+.landing__inspiration {
+  padding-top: clamp(2.5rem, 6vh, 4rem);
+  scroll-margin-top: 1rem;
+}
+
 .section-head {
   display: flex;
   align-items: center;
@@ -442,3 +447,132 @@
     margin-left: 0;
   }
 }
+
+/* Books Inspiration Card */
+
+.books-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.25rem;
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+}
+
+.books-card__content {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.books-card__eyebrow {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.books-card__idea {
+  margin: 0;
+  font-size: clamp(1.25rem, 2vw, 1.75rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.books-card__application {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+.books-card__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.books-card__shuffle {
+  align-self: flex-start;
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--hairline);
+  background: transparent;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: all var(--motion-hover);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .books-card__shuffle:hover {
+    border-color: var(--ink);
+    background: var(--ink);
+    color: var(--cream);
+  }
+}
+
+.books-card__shuffle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.books-card--skeleton .books-card__content > * {
+  background: linear-gradient(90deg, var(--hairline) 0%, var(--hairline) 100%);
+  border-radius: 2px;
+  animation: pulse 2s ease-in-out infinite;
+}
+
+.books-card--skeleton .books-card__eyebrow {
+  height: 12px;
+  width: 60%;
+}
+
+.books-card--skeleton .books-card__idea {
+  height: 24px;
+  width: 100%;
+}
+
+.books-card--skeleton .books-card__application {
+  height: 20px;
+  width: 90%;
+}
+
+.books-card--skeleton .books-card__tags span {
+  display: inline-block;
+  height: 20px;
+  width: 60px;
+  margin-right: 0.5rem;
+}
+
+.books-card--error {
+  padding: 1.25rem;
+  border: 1px solid var(--hairline);
+  background: var(--paper);
+}
+
+.books-card__error-text {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 22px;
+}
+
+@keyframes pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
