@@ -209,6 +209,53 @@
   scroll-margin-top: 1rem;
 }
 
+/* Give the landing inspiration card a dark, standout treatment */
+.landing__inspiration .books-card {
+  margin-top: 1.5rem;
+  padding: clamp(1.5rem, 3vw, 2.5rem);
+  border: none;
+  background: var(--ink);
+  color: var(--cream);
+}
+
+.landing__inspiration .books-card__eyebrow {
+  color: var(--cream);
+  opacity: 0.5;
+}
+
+.landing__inspiration .books-card__idea {
+  font-size: clamp(1.5rem, 2.5vw, 2.25rem);
+  color: var(--cream);
+}
+
+.landing__inspiration .books-card__application {
+  color: var(--cream);
+  opacity: 0.7;
+  font-size: 15px;
+  line-height: 24px;
+  max-width: 72ch;
+}
+
+.landing__inspiration .books-card__tags .tag {
+  border-color: rgb(255 255 255 / 20%);
+  color: var(--cream);
+  opacity: 0.7;
+}
+
+.landing__inspiration .books-card__shuffle {
+  border-color: rgb(255 255 255 / 25%);
+  color: var(--cream);
+  margin-top: 0.5rem;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .landing__inspiration .books-card__shuffle:hover {
+    border-color: var(--cream);
+    background: var(--cream);
+    color: var(--ink);
+  }
+}
+
 .section-head {
   display: flex;
   align-items: center;

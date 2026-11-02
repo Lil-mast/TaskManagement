@@ -3,9 +3,10 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import { Link } from 'react-router-dom';
 
+import { BooksInspirationCard } from '@/components/BooksInspirationCard';
 import { DailyDrill } from '@/components/DailyDrill';
 import { TechRadar } from '@/components/TechRadar';
-import { ApiError, briefingApi, tasksApi } from '@/lib/api';
+import { ApiError, booksApi, briefingApi, tasksApi } from '@/lib/api';
 import type { CreateTaskInput, Priority } from '@/lib/api/schemas/common';
 import { useSession } from '@/lib/auth/session';
 import { offlineDrillForDate } from '@/lib/daily-drill';
@@ -35,6 +36,13 @@ export function BriefScreen() {
 
   const [taskTitle, setTaskTitle] = useState('');
   const [taskPriority, setTaskPriority] = useState<Priority>('now');
+
+  const inspiration = useQuery({
+    queryKey: queryKeys.inspiration.daily,
+    queryFn: ({ signal }) => booksApi.getDailyInspiration(signal),
+    retry: false,
+    staleTime: 3_600_000,
+  });
 
   const tasks = useQuery({
     queryKey: queryKeys.tasks.list('open'),
@@ -394,7 +402,21 @@ export function BriefScreen() {
               ) : null}
             </section>
 
-            <TechRadar />
+            <section className="panel inspiration-panel" aria-label="Inspiration of the day">
+            <header className="panel__head">
+              <span>INSPIRATION OF THE DAY</span>
+              <span className="mono-label mono-label--muted">FROM THE LIBRARY</span>
+            </header>
+            <BooksInspirationCard
+              compact
+              inspiration={inspiration.data ?? { book: '', idea: '', tags: [] }}
+              alternatives={inspiration.data?.alternatives ?? []}
+              isLoading={inspiration.isPending}
+              isError={inspiration.isError}
+            />
+          </section>
+
+          <TechRadar />
 
             <section className="panel panel--ink brief-rule" aria-label="The product rule">
               <p className="mono-label">THE RULE</p>

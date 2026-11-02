@@ -660,3 +660,123 @@
     margin-left: 0;
   }
 }
+
+/* ── Inspiration of the Day panel (compact, brief sidebar) ───────────────── */
+
+.inspiration-panel .panel__head {
+  /* inherits panel__head — no extra overrides needed */
+}
+
+.insp--compact {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem 0 0.25rem;
+}
+
+.insp__source {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 13px;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.insp__source span {
+  opacity: 0.7;
+}
+
+.insp__idea {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(1.15rem, 1.6vw, 1.45rem);
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.025em;
+  color: var(--ink);
+}
+
+.insp__application {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 20px;
+  max-width: 52ch;
+}
+
+.insp__foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  padding-top: 0.25rem;
+}
+
+.insp__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.insp__shuffle {
+  padding: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 13px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border-bottom: 1px solid transparent;
+  transition:
+    color var(--motion-hover),
+    border-color var(--motion-hover);
+  white-space: nowrap;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .insp__shuffle:hover {
+    color: var(--crimson);
+    border-bottom-color: var(--crimson);
+  }
+}
+
+/* skeleton */
+.insp--skeleton .insp__source,
+.insp--skeleton .insp__idea,
+.insp--skeleton .insp__application {
+  background: var(--module);
+  border-radius: 2px;
+  animation: skeleton-pulse 1.1s ease-in-out infinite alternate;
+}
+
+.insp--skeleton .insp__source {
+  height: 10px;
+  width: 55%;
+}
+
+.insp--skeleton .insp__idea {
+  height: 1.3rem;
+  width: 100%;
+}
+
+.insp--skeleton .insp__application {
+  height: 0.85rem;
+  width: 88%;
+}
+
+/* error */
+.insp--error {
+  padding: 0.75rem 0;
+}
+
+.insp__error {
+  margin: 0;
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  line-height: 14px;
+  letter-spacing: 0.05em;
+}
