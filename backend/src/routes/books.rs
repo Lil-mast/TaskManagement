@@ -70,7 +70,7 @@ async fn daily_inspiration(
         let now = SystemTime::now();
         let duration = now
             .duration_since(UNIX_EPOCH)
-            .map_err(|e| AppError::Internal(format!("time error: {e}")))?;
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("time error: {e}")))?;
         (duration.as_secs() / 86400) as u64
     };
 
