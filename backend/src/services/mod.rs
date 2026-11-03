@@ -12,3 +12,4 @@ pub mod planner;
 pub mod rag;
 pub mod rate_limit;
 pub mod review;
+pub mod sandbox;
