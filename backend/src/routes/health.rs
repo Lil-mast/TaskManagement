@@ -14,6 +14,7 @@ pub struct Health {
     pub anthropic: &'static str,
     pub auth_mode: &'static str,
     pub llm_tokens_available: Option<f64>,
+    pub sandbox: &'static str,
 }
 
 /// `GET /healthz` — unauthenticated; hosts, humans, and CI probe this.
@@ -38,6 +39,11 @@ pub async fn health(State(state): State<Arc<AppState>>) -> AppResult<Json<Health
         },
         auth_mode: state.config.auth_mode(),
         llm_tokens_available: llm_tokens,
+        sandbox: if state.sandbox.is_some() {
+            "enabled"
+        } else {
+            "disabled"
+        },
     };
     Ok(Json(body))
 }

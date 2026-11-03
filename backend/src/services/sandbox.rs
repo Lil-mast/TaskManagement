@@ -225,13 +225,17 @@ impl SandboxService {
         }
     }
 
-    /// Quick health check: runs `docker info` and returns true if Docker is
-    /// reachable. Used to gate the workspace route with a 503.
+    /// Quick health check: runs `docker ps` and returns true if Docker is
+    /// reachable and the user has permission. Used to gate the workspace route
+    /// with a 503.
+    ///
+    /// `docker info --format {{.ID}}` can return exit 1 on some Linux
+    /// installations even when the daemon is healthy, so we use `docker ps`
+    /// which is a simpler, more reliable liveness probe.
     pub async fn is_docker_available() -> bool {
         Command::new("docker")
-            .arg("info")
-            .arg("--format")
-            .arg("{{.ID}}")
+            .arg("ps")
+            .arg("--quiet")
             .output()
             .await
             .map(|o| o.status.success())

@@ -281,6 +281,7 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
 /// Optionally initialise the sandbox service.
 /// Gated on GROWTH_WORKSPACE_ENABLED=true AND Docker being reachable.
 async fn build_sandbox(config: &Config) -> Option<SandboxService> {
+    tracing::info!(workspace_enabled = config.workspace_enabled, "sandbox config loaded");
     if !config.workspace_enabled {
         tracing::info!("workspace sandbox disabled (GROWTH_WORKSPACE_ENABLED not set)");
         return None;
