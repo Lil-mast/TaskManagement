@@ -35,7 +35,7 @@ COPY data ./data
 RUN cargo build --release --bin growth-copilot --bin apply_migration
 
 # ---------------------------------------------------------------------------
-# Stage 2: runtime — distroless (no shell, no package manager, ~50MB surface)
+# Stage 2: runtime distroless (no shell, no package manager, ~50MB surface)
 # ---------------------------------------------------------------------------
 FROM gcr.io/distroless/cc-debian12:nonroot
 WORKDIR /app
