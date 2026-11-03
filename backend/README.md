@@ -34,6 +34,9 @@ carry identity.
 (idempotent, complete). Files 0001–0006 are archived in `migrations/archive/`;
 `0008_drop_spa_legacy.sql` (drops SPA-era tables) was applied 2026-10-20.
 
+See **[Migrations guide](docs/MIGRATIONS.md)** for applying schema updates and
+creating new migrations.
+
 ## API contract
 
 | Endpoint | Method | Auth | Behavior |

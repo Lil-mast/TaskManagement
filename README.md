@@ -22,6 +22,7 @@ you accept, edit, or dismiss it.
 | **Calendar** | *Where does it fit?* Real gaps in the week, plus schedule suggestions that remain proposals. |
 | **Inbox** | *What needs a reply, a task, or nothing?* Gmail triage returns `reply`, `fyi`, `task`, or `ignore` decisions. |
 | **LeetCode** | *Which pattern is due?* Pattern confidence, attempts, no-help rate, and spaced review. |
+| **Workspace** | *How fast can I solve it?* Write and execute code in Python, Rust, JS, C, C++ directly in the app; get MrT debrief feedback after each run. |
 | **Review** | *What actually moved?* Weekly completion, priority breakdown, inbox state, and prep trend. |
 | **Principles** | *Why this advice?* A searchable corpus of book ideas, weighted by what has earned its keep. |
 
@@ -38,6 +39,18 @@ flowchart LR
 ```
 
 The whole product exists to protect that **decision** box.
+
+## 🎉 What's New
+
+**Workspace Sandbox + MrT Debrief** — practice LeetCode patterns directly in the app with real-time code execution and AI-powered post-solve feedback.
+
+- 🔧 **Run code in 5 languages:** Python, Rust, JavaScript, C, C++ via Docker sandbox
+- 🎓 **Get AI debrief:** Claude analyzes your solve and delivers feedback as MrT (hype for wins, mentor for learning)
+- 📚 **Pragmatic Programmer principles:** Daily tips from *The Pragmatic Programmer* woven into feedback
+- 📊 **Track all submissions:** Every run persists to the database for analysis
+- 🔗 **Integrate with SM-2:** Log attempts and auto-schedule follow-up practice
+
+See [`FEATURES.md`](#features) below for details, or jump to [**Workspace documentation**](#workspace--leetcode-code-execution-sandbox) in the backend README.
 
 ## How it is put together
 
