@@ -21,6 +21,7 @@ use services::embeddings::{
 };
 use services::rag::RagService;
 use services::rate_limit::UserRateLimiter;
+use services::sandbox::{SandboxConfig, SandboxService};
 use tower_http::cors::CorsLayer;
 use tower_http::trace::TraceLayer;
 
@@ -46,12 +47,14 @@ pub struct AppState {
     pub user_limiter: UserRateLimiter,
     /// per-user budget for expensive LLM / embedding actions
     pub llm_limiter: UserRateLimiter,
+    /// Docker-based code execution sandbox (workspace screen)
+    pub sandbox: Option<SandboxService>,
 }
 
 impl AppState {
     pub fn health_snapshot(&self) -> String {
         format!(
-            "db={} anthropic={} dailydev={} rag={} google={} gmail={} auth={}",
+            "db={} anthropic={} dailydev={} rag={} google={} gmail={} auth={} sandbox={}",
             self.db.is_some(),
             self.anthropic.is_some(),
             self.dailydev
@@ -67,7 +70,8 @@ impl AppState {
                 .as_ref()
                 .map(|e| e.is_configured())
                 .unwrap_or(false),
-            self.config.auth_mode()
+            self.config.auth_mode(),
+            self.sandbox.is_some()
         )
     }
 
@@ -270,7 +274,27 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
         token_crypto,
         user_limiter: UserRateLimiter::per_minute(config.user_rate_limit_rpm),
         llm_limiter: UserRateLimiter::per_hour(config.user_llm_limit_per_hour),
+        sandbox: build_sandbox(&config).await,
     }))
+}
+
+/// Optionally initialise the sandbox service.
+/// Gated on GROWTH_WORKSPACE_ENABLED=true AND Docker being reachable.
+async fn build_sandbox(config: &Config) -> Option<SandboxService> {
+    if !config.workspace_enabled {
+        tracing::info!("workspace sandbox disabled (GROWTH_WORKSPACE_ENABLED not set)");
+        return None;
+    }
+    if !SandboxService::is_docker_available().await {
+        tracing::warn!(
+            "GROWTH_WORKSPACE_ENABLED=true but Docker is not reachable — \
+             workspace execution disabled"
+        );
+        return None;
+    }
+    let timeout_secs = config.sandbox_timeout_secs;
+    tracing::info!(timeout_secs, "workspace sandbox enabled (Docker reachable)");
+    Some(SandboxService::with_timeout(timeout_secs))
 }
 
 /// Wire the full router: health + capture + tasks + briefing + cron.

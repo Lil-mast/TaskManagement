@@ -57,6 +57,12 @@ export const queryKeys = {
     weights: ['knowledge', 'weights'] as const,
     search: (query: string, k: number) => ['knowledge', 'search', query, k] as const,
   },
+
+  workspace: {
+    all: ['workspace'] as const,
+    /** Keyed by submission id so debrief queries don't collide. */
+    debrief: (submissionId: string) => ['workspace', 'debrief', submissionId] as const,
+  },
 } as const;
 
 /** Exact keys to invalidate after a confirmed mutation. */
@@ -69,4 +75,5 @@ export const invalidation = {
   afterIntegrationChange: [queryKeys.integrations, queryKeys.dailyDev, queryKeys.onboarding],
   afterLeetCodeWrite: [queryKeys.leetcode.all, queryKeys.tasks.all, queryKeys.brief.all],
   afterKnowledgeWrite: [queryKeys.knowledge.all],
+  afterWorkspaceRun: [queryKeys.leetcode.all, queryKeys.tasks.all, queryKeys.brief.all],
 } as const;

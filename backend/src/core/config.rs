@@ -92,10 +92,20 @@ pub struct Config {
     /// hex-encoded 32-byte master key for AES-GCM token encryption
     #[serde(default)]
     pub token_enc_key: Option<String>,
+    /// Enable the Docker-based code execution sandbox for /workspace
+    #[serde(default)]
+    pub workspace_enabled: bool,
+    /// Hard timeout (seconds) for each sandbox execution run (default 10)
+    #[serde(default = "default_sandbox_timeout")]
+    pub sandbox_timeout_secs: u64,
 }
 
 fn default_embeddings_dim() -> usize {
     1536
+}
+
+fn default_sandbox_timeout() -> u64 {
+    10
 }
 
 fn default_max_tokens() -> u32 {
@@ -220,6 +230,8 @@ impl Default for Config {
             google_client_secret: None,
             google_redirect_url: None,
             token_enc_key: None,
+            workspace_enabled: false,
+            sandbox_timeout_secs: 10,
         }
     }
 }

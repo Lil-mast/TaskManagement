@@ -11,6 +11,7 @@ pub mod leetcode;
 pub mod onboarding;
 pub mod review;
 pub mod tasks;
+pub mod workspace;
 
 /// All application routes, nested by feature.
 ///
@@ -31,6 +32,7 @@ pub fn router() -> axum::Router<std::sync::Arc<crate::AppState>> {
         .nest("/api/calendar", calendar::routes())
         .nest("/api/email", email::routes())
         .nest("/api/review", review::routes())
+        .nest("/api/workspace", workspace::routes())
         .nest("/api", onboarding::routes())
         .merge(crate::jobs::morning_brief::routes())
         .merge(crate::jobs::weekly_review::routes())
