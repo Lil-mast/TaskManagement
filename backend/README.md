@@ -212,3 +212,96 @@ wired to Render monitoring.
 - `GROWTH_CRON_SECRET` → scheduled jobs
 - `render` blueprint deploy + cron rows
 - SPA (repo root) is wired to this API — Firebase ID token or backend `dev` token; product screens are the next phase
+
+## Workspace — LeetCode code execution sandbox
+
+The `/workspace` screen lets you write and run code in five languages
+(Python, Rust, JavaScript, C, C++) directly in the app. Execution happens in
+short-lived Docker containers spawned by the backend.
+
+### Prerequisites
+
+1. **Docker installed and running** on the host machine.
+2. **Language images pre-pulled** (one-time, ~500MB total):
+
+```bash
+docker pull python:3.12-slim
+docker pull rust:1.78-slim
+docker pull node:20-slim
+docker pull gcc:13          # covers both C and C++
+```
+
+3. **Environment variables** set in `backend/.env`:
+
+```
+GROWTH_WORKSPACE_ENABLED=true
+GROWTH_SANDBOX_TIMEOUT_SECS=10   # optional, default 10
+```
+
+### Running locally
+
+The default `cargo run` setup works without Docker — the workspace route
+returns a `503 Unavailable` when `GROWTH_WORKSPACE_ENABLED` is `false` or
+Docker is not reachable. Set the flag and the route activates automatically.
+
+```bash
+# Enable in .env
+GROWTH_WORKSPACE_ENABLED=true
+
+cargo run
+# workspace available at POST http://localhost:8000/api/workspace/run
+```
+
+### Running in Docker (sandbox-capable image)
+
+The default distroless image has no shell and cannot run Docker. Build the
+sandbox variant instead, and bind-mount the host Docker socket:
+
+```bash
+# Build sandbox image
+docker build --build-arg SANDBOX_BUILD=1 -t growth-copilot:sandbox .
+
+# Run with socket mount
+docker run --rm \
+  -p 8000:8000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --group-add "$(stat -c '%g' /var/run/docker.sock)" \
+  --env-file .env \
+  growth-copilot:sandbox
+```
+
+> **Security note:** bind-mounting the Docker socket gives the backend
+> container host-level Docker access. Only do this on trusted infrastructure.
+> In production, prefer an isolated execution host or a managed code-runner
+> service. Each sandbox container runs with `--network none --memory 128m
+> --cpus 0.5 --read-only --tmpfs /tmp` to limit blast radius.
+
+### Verify execution works
+
+```bash
+# Quick smoke test: run a Python snippet
+curl -s -X POST http://localhost:8000/api/workspace/run \
+  -H "Authorization: Bearer dev" \
+  -H "Content-Type: application/json" \
+  -d '{"language":"python","code":"print(\"hello from MrT\")"}' \
+  | jq '{exit_code,stdout,time_ms}'
+
+# Expected:
+# { "exit_code": 0, "stdout": "hello from MrT\n", "time_ms": <n> }
+```
+
+### API endpoints added
+
+| Endpoint | Method | Auth | Behavior |
+|---|---|---|---|
+| `/api/workspace/run` | POST | Bearer | Execute code in sandbox; persists to `workspace_submissions`; returns `stdout/stderr/exit_code/time_ms/timed_out` |
+| `/api/workspace/debrief` | POST | Bearer + Anthropic | MrT post-solve debrief via Claude; returns `message/tone/tip` |
+
+### DB migration
+
+Run `0011_workspace_submissions.sql` on your database before enabling the
+workspace feature:
+
+```bash
+cargo run --bin apply_migration -- migrations/0011_workspace_submissions.sql
+```

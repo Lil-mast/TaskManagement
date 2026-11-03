@@ -43,6 +43,7 @@ impl Language {
             "javascript" | "js" => Some(Self::JavaScript),
             "c" => Some(Self::C),
             "cpp" | "c++" => Some(Self::Cpp),
+            _ => None,
         }
     }
 

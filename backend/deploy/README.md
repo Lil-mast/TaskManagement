@@ -100,3 +100,51 @@ Structured logs to stdout (Render Log Stream). `anthropic.chat`,
 In the OAuth web client (the one backing calendar + gmail consent):
 1. Authorized redirect URI → `https://<service>.onrender.com/api/integrations/google/callback`
 2. Publish the app (or keep test users limited by design)
+
+## 6. Workspace sandbox on Render
+
+The code-execution sandbox requires Docker-in-Docker or a host socket mount —
+**not supported on Render's managed Docker runtime** (no DinD, no socket
+access). Options:
+
+### Option A — Disable on Render (recommended for now)
+Leave `GROWTH_WORKSPACE_ENABLED=false` (the default) on the Render service.
+The `/api/workspace/run` route returns a clean `503 Unavailable`. The
+workspace UI degrades gracefully — the Run button stays visible but shows the
+error message.
+
+### Option B — Dedicated execution host
+Provision a small VPS (e.g. DigitalOcean Droplet, Hetzner CX11) with Docker:
+
+```bash
+# On the VPS: start the sandbox-capable image
+docker build --build-arg SANDBOX_BUILD=1 -t growth-copilot:sandbox .
+docker run -d --restart unless-stopped \
+  -p 8000:8000 \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  --group-add "$(stat -c '%g' /var/run/docker.sock)" \
+  -e GROWTH_WORKSPACE_ENABLED=true \
+  -e GROWTH_DATABASE_URL=... \
+  --env-file .env \
+  growth-copilot:sandbox
+```
+
+Point the SPA's `VITE_API_BASE_URL` (or nginx proxy) to the VPS for
+workspace routes. The Render service handles everything else.
+
+### Language images to pre-pull on the execution host
+
+```bash
+docker pull python:3.12-slim
+docker pull rust:1.78-slim
+docker pull node:20-slim
+docker pull gcc:13
+```
+
+### Render env vars (no sandbox)
+Add to the Render service environment (or leave unset — defaults to disabled):
+
+```
+GROWTH_WORKSPACE_ENABLED=false
+GROWTH_SANDBOX_TIMEOUT_SECS=10
+```

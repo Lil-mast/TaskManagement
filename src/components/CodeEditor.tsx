@@ -21,7 +21,7 @@ import {
   indentOnInput,
   syntaxHighlighting,
 } from '@codemirror/language';
-import { EditorState } from '@codemirror/state';
+import { Compartment, EditorState } from '@codemirror/state';
 import {
   drawSelection,
   dropCursor,
@@ -148,6 +148,7 @@ export function CodeEditor({
   // Track whether we are in the middle of an external value update to avoid
   // re-triggering onChange and creating infinite loops.
   const externalUpdateRef = useRef(false);
+  const readOnlyCompartment = useRef(new Compartment());
 
   // Stable onChange callback so the effect doesn't re-run on every render.
   const onChangeRef = useRef(onChange);
@@ -172,7 +173,7 @@ export function CodeEditor({
       }
     });
 
-    const editableExt = EditorState.readOnly.of(disabled);
+    const editableExt = readOnlyCompartment.current.of(EditorState.readOnly.of(disabled));
 
     const state = EditorState.create({
       doc: value,
@@ -239,7 +240,9 @@ export function CodeEditor({
     const view = viewRef.current;
     if (!view) return;
     view.dispatch({
-      effects: EditorState.readOnly.reconfigure(disabled),
+      effects: readOnlyCompartment.current.reconfigure(
+        EditorState.readOnly.of(disabled),
+      ),
     });
   }, [disabled]);
 

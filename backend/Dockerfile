@@ -5,8 +5,32 @@
 #
 # Secrets are never baked into the image — they arrive from the platform
 # secret manager at runtime (`fly secrets set`, Railway variables, etc.).
+#
+# ── Workspace / sandbox mode ────────────────────────────────────────────────
+# The /api/workspace/run endpoint spawns Docker containers on the host to
+# execute user code. This requires:
+#
+#   1. GROWTH_WORKSPACE_ENABLED=true in the runtime env
+#   2. The host Docker socket bind-mounted into this container:
+#        docker run ... -v /var/run/docker.sock:/var/run/docker.sock ...
+#   3. Language images pre-pulled on the host:
+#        docker pull python:3.12-slim rust:1.78-slim node:20-slim gcc:13
+#
+# Use the SANDBOX_BUILD arg to produce a "sandbox-capable" image that
+# includes the Docker CLI (larger image, ~debian-slim base):
+#
+#   docker build --build-arg SANDBOX_BUILD=1 -t growth-copilot:sandbox .
+#   docker run --rm -p 8000:8000 \
+#     -v /var/run/docker.sock:/var/run/docker.sock \
+#     --env-file .env \
+#     growth-copilot:sandbox
+#
+# Without SANDBOX_BUILD the build produces the slim distroless image (default,
+# for production deployments that don't need code execution).
+# ---------------------------------------------------------------------------
 
 ARG RUST_VERSION=1.87
+ARG SANDBOX_BUILD=0
 
 # ---------------------------------------------------------------------------
 # Stage 1: build (deps cached via the two dummy-main trick)
@@ -48,4 +72,27 @@ ENV GROWTH_PORT=8000
 EXPOSE 8000
 
 # distroless has no shell — the binary IS the container entrypoint
+ENTRYPOINT ["./growth-copilot"]
+
+# ---------------------------------------------------------------------------
+# Stage 3 (optional): sandbox-capable runtime — debian-slim + docker CLI
+# Build with: docker build --build-arg SANDBOX_BUILD=1 -t growth-copilot:sandbox .
+# ---------------------------------------------------------------------------
+FROM debian:bookworm-slim AS sandbox-runtime
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ca-certificates \
+        docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY --from=build /build/target/release/growth-copilot ./growth-copilot
+COPY --from=build /build/data ./data
+
+ENV GROWTH_PORT=8000
+EXPOSE 8000
+
+# Non-root user for the process; Docker socket access requires the container
+# to be run with --group-add "$(stat -c '%g' /var/run/docker.sock)" or
+# --user root. See deploy/README.md for the recommended run command.
 ENTRYPOINT ["./growth-copilot"]

@@ -258,6 +258,7 @@ fn build_system_prompt(tone: &str) -> String {
              affectionately, and always close with one sharp technical insight about \
              why mastering this pattern matters at scale on AWS. \
              Keep responses to 3-5 sentences. No markdown. Never sycophantic."
+                .to_string()
         }
         _ => {
             "You are MrT — a senior AWS solutions architect and staff engineer with 15 years \
@@ -266,6 +267,7 @@ fn build_system_prompt(tone: &str) -> String {
              user did right and one thing to think harder about next time. \
              Reference real engineering trade-offs (time/space complexity, cache behaviour, \
              distributed systems implications). Keep responses to 3-5 sentences. No markdown."
+                .to_string()
         }
     }
 }
