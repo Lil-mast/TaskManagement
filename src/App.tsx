@@ -15,6 +15,7 @@ import { OnboardingScreen } from '@/screens/OnboardingScreen';
 import { StatusScreen } from '@/screens/StatusScreen';
 import { TasksScreen } from '@/screens/TasksScreen';
 import { TrashScreen } from '@/screens/TrashScreen';
+import { WorkspaceScreen } from '@/screens/WorkspaceScreen';
 
 function ScreenGate({ label = 'CHECKING SESSION' }: { label?: string }) {
   return (
@@ -103,6 +104,7 @@ export function App() {
           <Route path="/tasks" element={<TasksScreen />} />
           <Route path="/tasks/:id" element={<TasksScreen />} />
           <Route path="/trash" element={<TrashScreen />} />
+          <Route path="/workspace" element={<WorkspaceScreen />} />
         </Route>
         <Route path="/status" element={<StatusScreen />} />
         <Route path="*" element={<NotFoundScreen />} />

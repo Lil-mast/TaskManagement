@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 
-import { BriefIcon, CaptureIcon, TasksIcon, TrashIcon } from '@/components/icons';
+import { BriefIcon, CaptureIcon, TasksIcon, TrashIcon, WorkspaceIcon } from '@/components/icons';
 import { Wordmark } from '@/components/Wordmark';
 import { healthApi } from '@/lib/api';
 import { useSession } from '@/lib/auth/session';
@@ -19,6 +19,7 @@ const dateLabel = new Intl.DateTimeFormat('en-GB', {
 function pageTitle(pathname: string): string {
   if (pathname.startsWith('/tasks')) return 'Tasks';
   if (pathname.startsWith('/trash')) return 'Trash';
+  if (pathname.startsWith('/workspace')) return 'Workspace';
   return 'Daily Brief';
 }
 
@@ -100,6 +101,15 @@ export function AppShell() {
           >
             <TasksIcon />
             <span className="rail-link__label">Tasks</span>
+          </NavLink>
+          <NavLink
+            to="/workspace"
+            className={({ isActive }) => `rail-link ${isActive ? 'rail-link--active' : ''}`}
+            title="Workspace"
+            onClick={() => setRailOpen(false)}
+          >
+            <WorkspaceIcon />
+            <span className="rail-link__label">Workspace</span>
           </NavLink>
           <NavLink
             to={capturePath}
@@ -227,6 +237,13 @@ export function AppShell() {
         >
           <TasksIcon />
           <span>Tasks</span>
+        </NavLink>
+        <NavLink
+          to="/workspace"
+          className={({ isActive }) => `bottom-link ${isActive ? 'bottom-link--active' : ''}`}
+        >
+          <WorkspaceIcon />
+          <span>Workspace</span>
         </NavLink>
         <NavLink to={capturePath} className="bottom-link bottom-link--capture">
           <CaptureIcon />

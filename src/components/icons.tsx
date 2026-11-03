@@ -81,3 +81,13 @@ export function ArrowIcon(props: IconProps) {
     </IconBase>
   );
 }
+
+export function WorkspaceIcon(props: IconProps) {
+  return (
+    <IconBase {...props}>
+      {/* Terminal prompt chevron + underline cursor */}
+      <path d="M4.5 7.5l5 4.5-5 4.5" />
+      <path d="M13 16.5h6.5" />
+    </IconBase>
+  );
+}
