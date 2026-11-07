@@ -66,14 +66,14 @@ describe('authApi', () => {
       http.get('http://localhost:8000/api/auth/me', ({ request }) => {
         expect(request.headers.get('authorization')).toBe('Bearer fixture-token');
         return HttpResponse.json({
-          user_id: 'firebase-uid',
+          user_id: 'supabase-uid',
           email: 'invited@example.com',
           name: 'Invited operator',
           email_verified: true,
           is_admin: false,
           allowed: true,
           reason: null,
-          auth_mode: 'firebase',
+          auth_mode: 'supabase',
         });
       }),
     );

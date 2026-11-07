@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const authModeSchema = z.enum(['firebase', 'supabase', 'dev', 'unconfigured']);
+export const authModeSchema = z.enum(['supabase', 'dev', 'unconfigured']);
 
 export const authMeSchema = z
   .object({

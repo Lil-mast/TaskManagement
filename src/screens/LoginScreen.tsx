@@ -12,13 +12,13 @@ function authErrorCopy(error: unknown): string {
 
   switch (code) {
     case 'auth/popup-closed-by-user':
-      return 'Google sign-in was cancelled. No changes were made.';
+      return 'GitHub sign-in was cancelled. No changes were made.';
     case 'auth/popup-blocked':
-      return 'Your browser blocked the Google popup. Allow popups for this site and try again.';
+      return 'Your browser blocked the GitHub sign-in window. Allow popups for this site and try again.';
     case 'auth/cancelled-popup-request':
       return 'Another sign-in window is already open. Finish that one or close it first.';
     case 'auth/network-request-failed':
-      return "Couldn't reach Firebase. Check your connection and try again.";
+      return "Couldn't reach the auth service. Check your connection and try again.";
     case 'auth/invalid-email':
       return "That email address doesn't look right.";
     case 'auth/user-not-found':
@@ -32,7 +32,7 @@ function authErrorCopy(error: unknown): string {
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a moment, then try again.';
     case 'auth/operation-not-allowed':
-      return "That sign-in method isn't enabled in Firebase.";
+      return "That sign-in method isn't enabled in Supabase.";
     case 'auth/account-exists-with-different-credential':
       return 'That email is already linked to another sign-in method.';
     default:
@@ -54,7 +54,7 @@ export function LoginScreen() {
     enterDevSession,
     refreshSession,
     resendVerification,
-    signInWithGoogle,
+    signInWithGitHub,
     signInWithEmail,
     signOut,
     signUpWithEmail,
@@ -75,11 +75,11 @@ export function LoginScreen() {
     else setParams({});
   }
 
-  async function handleGoogle() {
+  async function handleGitHub() {
     setError(null);
     setBusy(true);
     try {
-      await signInWithGoogle();
+      await signInWithGitHub();
     } catch (caught) {
       setError(authErrorCopy(caught));
     } finally {
@@ -193,11 +193,12 @@ export function LoginScreen() {
 
           {!configured ? (
             <div className="auth__notice" role="alert">
-              <p className="eyebrow">FIREBASE NOT CONFIGURED</p>
+              <p className="eyebrow">SUPABASE NOT CONFIGURED</p>
               <h3>Sign-in is not available in this build.</h3>
               <p>
-                Set <code>VITE_AUTH_MODE=firebase</code> and the <code>VITE_FIREBASE_*</code>{' '}
-                values, then rebuild. In local development, use the dev-token session instead.
+                Set <code>VITE_AUTH_MODE=supabase</code>, <code>VITE_SUPABASE_URL</code> and{' '}
+                <code>VITE_SUPABASE_ANON_KEY</code>, then rebuild. In local development, use the
+                dev-token session instead.
               </p>
               <Link className="btn btn--ghost" to="/">
                 Back to landing
@@ -279,7 +280,7 @@ export function LoginScreen() {
               </div>
               <h3>This build is using the backend's dev token.</h3>
               <p>
-                Firebase is not configured, so sign-in and sign-up are simulated locally. You
+                Supabase Auth is not configured, so sign-in and sign-up are simulated locally. You
                 can review the full route without creating an account.
               </p>
               <button
@@ -293,8 +294,8 @@ export function LoginScreen() {
                 Enter local workspace
               </button>
               <p className="auth__hint">
-                To enable real accounts, set <code>VITE_AUTH_MODE=firebase</code> and the{' '}
-                <code>VITE_FIREBASE_*</code> values in <code>.env.local</code>.
+                To enable real accounts, set <code>VITE_AUTH_MODE=supabase</code> and the{' '}
+                <code>VITE_SUPABASE_*</code> values in <code>.env.local</code>.
               </p>
             </div>
           ) : (
@@ -321,15 +322,15 @@ export function LoginScreen() {
               </div>
 
               <button
-                className="btn btn--ghost auth__google"
+                className="btn btn--ghost auth__github"
                 type="button"
-                onClick={() => void handleGoogle()}
+                onClick={() => void handleGitHub()}
                 disabled={busy}
               >
-                <span className="auth__google-mark" aria-hidden="true">
-                  G
+                <span className="auth__github-mark" aria-hidden="true">
+                  GH
                 </span>
-                Continue with Google
+                Continue with GitHub
               </button>
 
               <div className="auth__divider">

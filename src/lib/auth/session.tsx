@@ -7,20 +7,11 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import type { User } from 'firebase/auth';
+import type { User } from '@supabase/supabase-js';
 
 import { authApi } from '@/lib/api';
-import { AUTH_MODE, type AuthMode } from '@/lib/api/config';
-import {
-  isFirebaseConfigured,
-  onAuthStateChange,
-  reloadCurrentUser,
-  resendVerificationEmail as firebaseResendVerificationEmail,
-  signInWithEmail as firebaseSignInWithEmail,
-  signInWithGoogle as firebaseSignInWithGoogle,
-  signOut as firebaseSignOut,
-  signUpWithEmail as firebaseSignUpWithEmail,
-} from './firebase';
+import { AUTH_MODE, isSupabaseConfigured, type AuthMode } from '@/lib/api/config';
+import { supabase } from './supabase';
 
 export type SessionStatus =
   | 'loading'
@@ -40,13 +31,13 @@ export interface SessionUser {
 }
 
 interface SessionContextValue {
-  mode: AuthMode;
+  mode: AuthMode | 'unconfigured';
   configured: boolean;
   status: SessionStatus;
   user: SessionUser | null;
   blockedReason: BlockedReason | null;
   enterDevSession: () => void;
-  signInWithGoogle: () => Promise<void>;
+  signInWithGitHub: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
   signUpWithEmail: (email: string, password: string) => Promise<void>;
   resendVerification: () => Promise<void>;
@@ -55,15 +46,15 @@ interface SessionContextValue {
 }
 
 const DEV_SESSION_KEY = 'mrt.dev-session.v1';
-
 const SessionContext = createContext<SessionContextValue | null>(null);
 
-function fromFirebaseUser(user: User): SessionUser {
+function fromSupabaseUser(user: User): SessionUser {
+  const metadataName = user.user_metadata?.full_name ?? user.user_metadata?.name;
   return {
-    id: user.uid,
-    email: user.email,
-    name: user.displayName ?? user.email?.split('@')[0] ?? 'Operator',
-    emailVerified: user.emailVerified,
+    id: user.id,
+    email: user.email ?? null,
+    name: typeof metadataName === 'string' ? metadataName : user.email?.split('@')[0] ?? 'Operator',
+    emailVerified: Boolean(user.email_confirmed_at),
     isAdmin: false,
   };
 }
@@ -90,7 +81,7 @@ function writeDevSession(user: SessionUser): void {
   try {
     localStorage.setItem(DEV_SESSION_KEY, JSON.stringify(user));
   } catch {
-    // Private browsing can reject storage; the in-memory session still works.
+    // The in-memory session still works when browser storage is unavailable.
   }
 }
 
@@ -108,8 +99,8 @@ interface ResolvedSession {
   blockedReason: BlockedReason | null;
 }
 
-async function resolveFirebaseSession(firebaseUser: User): Promise<ResolvedSession> {
-  const base = fromFirebaseUser(firebaseUser);
+async function resolveSupabaseSession(authUser: User): Promise<ResolvedSession> {
+  const base = fromSupabaseUser(authUser);
   try {
     const me = await authApi.me();
     const user: SessionUser = {
@@ -119,9 +110,7 @@ async function resolveFirebaseSession(firebaseUser: User): Promise<ResolvedSessi
       emailVerified: me.email_verified,
       isAdmin: me.is_admin,
     };
-    if (me.allowed) {
-      return { user, status: 'authenticated', blockedReason: null };
-    }
+    if (me.allowed) return { user, status: 'authenticated', blockedReason: null };
     return {
       user,
       status: 'blocked',
@@ -132,55 +121,56 @@ async function resolveFirebaseSession(firebaseUser: User): Promise<ResolvedSessi
   }
 }
 
+function requireSupabase() {
+  if (!supabase) throw new Error('Supabase Auth is not configured for this deployment.');
+  return supabase;
+}
+
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<SessionUser | null>(() =>
     AUTH_MODE === 'dev' ? readDevSession() : null,
   );
   const [status, setStatus] = useState<SessionStatus>(() => {
     if (AUTH_MODE === 'dev') return readDevSession() ? 'authenticated' : 'anonymous';
-    return isFirebaseConfigured ? 'loading' : 'unconfigured';
+    return isSupabaseConfigured ? 'loading' : 'unconfigured';
   });
   const [blockedReason, setBlockedReason] = useState<BlockedReason | null>(null);
 
-  const applyFirebaseSession = useCallback(async (firebaseUser: User) => {
+  const applySupabaseSession = useCallback(async (authUser: User) => {
     setStatus('loading');
-    const resolved = await resolveFirebaseSession(firebaseUser);
+    const resolved = await resolveSupabaseSession(authUser);
     setUser(resolved.user);
     setStatus(resolved.status);
     setBlockedReason(resolved.blockedReason);
   }, []);
 
   useEffect(() => {
-    if (AUTH_MODE !== 'firebase' || !isFirebaseConfigured) return;
-
+    if (AUTH_MODE !== 'supabase' || !supabase) return;
     let active = true;
-    const unsubscribe = onAuthStateChange((firebaseUser) => {
+    const { data } = supabase.auth.onAuthStateChange((_event, session) => {
       if (!active) return;
-      if (!firebaseUser) {
+      if (!session?.user) {
         setUser(null);
         setStatus('anonymous');
         setBlockedReason(null);
         return;
       }
-      void applyFirebaseSession(firebaseUser);
+      // Defer network work so it does not run inside Supabase's auth callback lock.
+      window.setTimeout(() => {
+        if (active) void applySupabaseSession(session.user);
+      }, 0);
     });
-
     return () => {
       active = false;
-      unsubscribe();
+      data.subscription.unsubscribe();
     };
-  }, [applyFirebaseSession]);
+  }, [applySupabaseSession]);
 
   const enterDevSession = useCallback(() => {
-    if (AUTH_MODE !== 'dev') {
-      throw new Error('Local sessions are only available in dev-token mode.');
-    }
+    if (AUTH_MODE !== 'dev') throw new Error('Local sessions are only available in dev-token mode.');
     const next: SessionUser = {
-      id: 'local_dev',
-      email: 'dev@localhost',
-      name: 'Local operator',
-      emailVerified: true,
-      isAdmin: true,
+      id: 'local_dev', email: 'dev@localhost', name: 'Local operator',
+      emailVerified: true, isAdmin: true,
     };
     writeDevSession(next);
     setUser(next);
@@ -188,94 +178,71 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setBlockedReason(null);
   }, []);
 
-  const signInWithGoogle = useCallback(async () => {
-    if (AUTH_MODE !== 'firebase') {
-      throw new Error('Google sign-in is only available when Firebase is configured.');
-    }
-    const firebaseUser = await firebaseSignInWithGoogle();
-    await applyFirebaseSession(firebaseUser);
-  }, [applyFirebaseSession]);
-
-  const signInWithEmail = useCallback(
-    async (email: string, password: string) => {
-      if (AUTH_MODE !== 'firebase') {
-        throw new Error('Email sign-in is only available when Firebase is configured.');
-      }
-      const firebaseUser = await firebaseSignInWithEmail(email, password);
-      await applyFirebaseSession(firebaseUser);
-    },
-    [applyFirebaseSession],
-  );
-
-  const signUpWithEmail = useCallback(
-    async (email: string, password: string) => {
-      if (AUTH_MODE !== 'firebase') {
-        throw new Error('Email sign-up is only available when Firebase is configured.');
-      }
-      const firebaseUser = await firebaseSignUpWithEmail(email, password);
-      await applyFirebaseSession(firebaseUser);
-    },
-    [applyFirebaseSession],
-  );
-
-  const resendVerification = useCallback(async () => {
-    if (AUTH_MODE !== 'firebase') return;
-    await firebaseResendVerificationEmail();
+  const signInWithGitHub = useCallback(async () => {
+    if (AUTH_MODE !== 'supabase') throw new Error('GitHub sign-in requires Supabase Auth configuration.');
+    const { error } = await requireSupabase().auth.signInWithOAuth({
+      provider: 'github',
+      options: { scopes: 'user:email', redirectTo: `${window.location.origin}/login` },
+    });
+    if (error) throw error;
   }, []);
 
+  const signInWithEmail = useCallback(async (email: string, password: string) => {
+    if (AUTH_MODE !== 'supabase') throw new Error('Email sign-in requires Supabase Auth configuration.');
+    const { data, error } = await requireSupabase().auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    if (data.user) await applySupabaseSession(data.user);
+  }, [applySupabaseSession]);
+
+  const signUpWithEmail = useCallback(async (email: string, password: string) => {
+    if (AUTH_MODE !== 'supabase') throw new Error('Email sign-up requires Supabase Auth configuration.');
+    const { data, error } = await requireSupabase().auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: `${window.location.origin}/login` },
+    });
+    if (error) throw error;
+    if (data.user && data.session) await applySupabaseSession(data.user);
+  }, [applySupabaseSession]);
+
+  const resendVerification = useCallback(async () => {
+    const current = user?.email;
+    if (!current) throw new Error('Sign in again before requesting another email.');
+    const { error } = await requireSupabase().auth.resend({ type: 'signup', email: current });
+    if (error) throw error;
+  }, [user?.email]);
+
   const refreshSession = useCallback(async () => {
-    if (AUTH_MODE !== 'firebase') return;
-    const firebaseUser = await reloadCurrentUser();
-    if (!firebaseUser) {
+    const { data, error } = await requireSupabase().auth.getUser();
+    if (error) throw error;
+    if (!data.user) {
       setUser(null);
       setStatus('anonymous');
       setBlockedReason(null);
       return;
     }
-    await applyFirebaseSession(firebaseUser);
-  }, [applyFirebaseSession]);
+    await applySupabaseSession(data.user);
+  }, [applySupabaseSession]);
 
   const signOut = useCallback(async () => {
     setBlockedReason(null);
     if (AUTH_MODE === 'dev') {
       clearDevSession();
-      setUser(null);
-      setStatus('anonymous');
-      return;
+    } else if (supabase) {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
     }
-    await firebaseSignOut();
     setUser(null);
-    setStatus('anonymous');
+    setStatus(AUTH_MODE === 'unconfigured' ? 'unconfigured' : 'anonymous');
   }, []);
 
-  const value = useMemo<SessionContextValue>(
-    () => ({
-      mode: AUTH_MODE,
-      configured: AUTH_MODE === 'dev' || isFirebaseConfigured,
-      status,
-      user,
-      blockedReason,
-      enterDevSession,
-      signInWithGoogle,
-      signInWithEmail,
-      signUpWithEmail,
-      resendVerification,
-      refreshSession,
-      signOut,
-    }),
-    [
-      status,
-      user,
-      blockedReason,
-      enterDevSession,
-      signInWithGoogle,
-      signInWithEmail,
-      signUpWithEmail,
-      resendVerification,
-      refreshSession,
-      signOut,
-    ],
-  );
+  const value = useMemo<SessionContextValue>(() => ({
+    mode: AUTH_MODE,
+    configured: AUTH_MODE === 'dev' || (AUTH_MODE === 'supabase' && isSupabaseConfigured),
+    status, user, blockedReason, enterDevSession, signInWithGitHub, signInWithEmail,
+    signUpWithEmail, resendVerification, refreshSession, signOut,
+  }), [status, user, blockedReason, enterDevSession, signInWithGitHub, signInWithEmail,
+    signUpWithEmail, resendVerification, refreshSession, signOut]);
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
 }

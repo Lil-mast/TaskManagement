@@ -9,27 +9,22 @@ export const API_BASE_URL = withoutTrailingSlash(
   configuredBase && configuredBase.length > 0 ? configuredBase : 'http://localhost:8000',
 );
 
-export type AuthMode = 'dev' | 'firebase';
+export type AuthMode = 'dev' | 'supabase';
 
-const firebaseEnvConfigured = [
-  'VITE_FIREBASE_API_KEY',
-  'VITE_FIREBASE_AUTH_DOMAIN',
-  'VITE_FIREBASE_PROJECT_ID',
-  'VITE_FIREBASE_STORAGE_BUCKET',
-  'VITE_FIREBASE_MESSAGING_SENDER_ID',
-  'VITE_FIREBASE_APP_ID',
-].every((key) => String(import.meta.env[key] ?? '').trim().length > 0);
+export const isSupabaseConfigured = Boolean(
+  import.meta.env.VITE_SUPABASE_URL?.trim() && import.meta.env.VITE_SUPABASE_ANON_KEY?.trim(),
+);
 
 const explicitAuthMode = import.meta.env.VITE_AUTH_MODE;
 
-export const AUTH_MODE: AuthMode =
-  explicitAuthMode === 'dev' || explicitAuthMode === 'firebase'
+export const AUTH_MODE: AuthMode | 'unconfigured' =
+  explicitAuthMode === 'dev' || explicitAuthMode === 'supabase'
     ? explicitAuthMode
-    : firebaseEnvConfigured
-      ? 'firebase'
+    : isSupabaseConfigured
+      ? 'supabase'
       : import.meta.env.DEV
         ? 'dev'
-        : 'firebase';
+        : 'unconfigured';
 
 /** Per-endpoint budgets. LLM-backed calls get room; ordinary reads stay tight. */
 export const TIMEOUTS = {

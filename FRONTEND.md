@@ -189,7 +189,7 @@ flowchart LR
 | Route | Surface | Auth | Primary data | Build priority |
 |---|---|---|---|---|
 | `/` | Public landing | No | Static | P2 |
-| `/login` | Sign in | No | Firebase Auth | P0 |
+| `/login` | Sign in | No | Supabase Auth | P0 |
 | `/onboarding` | Calibration | Yes | `GET /api/onboarding`, `GET/PUT /api/profile` | P0 |
 | `/brief` | Daily intelligence (default) | Yes | `GET /api/briefing` | P0 |
 | `/tasks` | Priority ledger | Yes | `GET /api/tasks` | P0 |
@@ -251,10 +251,10 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    A["Open app"] --> B{"Firebase session?"}
+    A["Open app"] --> B{"Supabase session?"}
     B -- no --> C["/login"]
-    C --> D["Google popup or email/password"]
-    D --> E["Firebase ID token"]
+    C --> D["GitHub OAuth or email/password"]
+    D --> E["Supabase access token"]
     E --> F["GET /api/auth/me"]
     F --> G{"allowed?"}
     G -- no --> H["Blocked panel: verify email / not invited"]
@@ -268,12 +268,12 @@ flowchart TD
     M --> N["/brief"]
 ```
 
-- Google popup is the primary path; email/password is the fallback.
+- GitHub OAuth is the primary path; email/password is the fallback.
 - Accounts are invite-only. `/api/auth/me` decides between the workspace and a
   blocked panel that explains an unverified email or missing invite.
 - Handle popup blocked, cancelled, network failure, disabled account, and expired
   session with specific copy — not a generic “Something went wrong”.
-- Never store tokens in `localStorage`; use the Firebase SDK’s token lifecycle.
+- Use the Supabase SDK's session storage and token refresh lifecycle.
 - Non-admin API calls are budgeted per user (60/min plus 10 LLM actions/hour);
   show the server’s `Retry-After` when a `429` arrives.
 
@@ -807,7 +807,7 @@ sort by due/created, `NEW TASK`, `CAPTURE`.
 ### 5.15 Profile — `/settings/profile`
 
 - Name, target interview date, focus areas (max 8), save.
-- Account email and sign-out from Firebase.
+- Account email and sign-out from Supabase Auth.
 - Keyboard shortcuts sheet and build/version from `/healthz`.
 - No avatar upload in v1; no theme toggle until dark mode is designed.
 - Destructive account deletion is not offered because the backend has no endpoint.
@@ -1199,7 +1199,7 @@ src/
 │   └── agent/       # ProposalCard, Confidence, SourceBadge, RunStrip
 ├── lib/
 │   ├── api/         # client, endpoints, DTOs, errors
-│   ├── auth/        # Firebase provider, token refresh
+│   ├── auth/        # Supabase provider, token refresh
 │   ├── query/       # keys, invalidation, optimistic helpers
 │   ├── format/      # dates, duration, priority labels
 │   └── analytics/   # product events
@@ -1249,7 +1249,7 @@ flowchart TD
 
 | State | Owner | Tool |
 |---|---|---|
-| Session / token | Auth provider | Firebase SDK + context |
+| Session / token | Auth provider | Supabase SDK + context |
 | Server data | Query cache | TanStack Query |
 | Brief today | Query key `['brief','today']` | TanStack Query |
 | Tasks by status | Query key `['tasks', status]` | TanStack Query |
@@ -1281,7 +1281,7 @@ async function apiFetch<T>(
 ```
 
 - Base URL: `VITE_API_BASE_URL` (default `http://localhost:8000`).
-- Inject `Authorization: Bearer <Firebase ID token>`.
+- Inject `Authorization: Bearer <Supabase access token>`.
 - On 401: refresh once, retry once, then sign out.
 - Timeouts: 15s normal, 30s triage/sync, 60s brief composition.
 - Parse `Retry-After` on 429 and expose a countdown.

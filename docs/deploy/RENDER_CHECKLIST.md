@@ -7,7 +7,7 @@ Quick reference for deploying Growth Copilot backend to Render. Follow in order.
 ## Pre-Deployment Prep (5 min)
 
 - [ ] Have Supabase database running; copy **Pooler** connection string
-- [ ] Have Firebase Project ID (from Firebase Console → Project Settings)
+- [ ] Have Supabase Auth project URL and configure its GitHub provider
 - [ ] Have Anthropic API key (dashboard.anthropic.com → API Keys)
 - [ ] Have Google OAuth credentials:
   - Client ID
@@ -59,9 +59,9 @@ Key: GROWTH_DATABASE_URL
 Value: postgresql://user:password@...pooler.supabase.co:6543/postgres
 (copy from Supabase Console → Databases → Connection String)
 
-Key: GROWTH_FIREBASE_PROJECT_ID
-Value: your-firebase-project-id
-(from Firebase Console → Project Settings → Project ID)
+Key: GROWTH_SUPABASE_URL
+Value: https://your-project-ref.supabase.co
+(from Supabase Dashboard → Project Settings → API)
 
 Key: GROWTH_ANTHROPIC_API_KEY
 Value: sk-ant-...
@@ -119,7 +119,7 @@ curl https://growth-copilot.onrender.com/healthz
   "version": "0.1.0",
   "database": "ok",
   "anthropic": "ok",
-  "auth_mode": "firebase",
+  "auth_mode": "supabase",
   "llm_tokens_available": true
 }
 ```
@@ -160,7 +160,7 @@ Once your frontend is deployed on AWS CloudFront:
 ### Health Check Returns Error
 - `database: false` → `GROWTH_DATABASE_URL` is wrong (test with `psql` locally)
 - `anthropic: false` → `GROWTH_ANTHROPIC_API_KEY` is invalid (test on Anthropic dashboard)
-- `auth_mode: unknown` → `GROWTH_FIREBASE_PROJECT_ID` doesn't match frontend's project
+- `auth_mode: unconfigured` → set `GROWTH_SUPABASE_URL` on the backend
 
 ### Manual Restart
 If the service is stuck:

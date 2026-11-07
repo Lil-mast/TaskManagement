@@ -1,14 +1,9 @@
 //! Verified-identity extraction for `/api` routes.
 //!
 //! Provider precedence on every Bearer token:
-//!   1. **Firebase Auth** (`GROWTH_FIREBASE_PROJECT_ID` set) — THE production
-//!      identity (user-directed 2026-10-20): the frontend signs in with the
-//!      Google OAuth popup through Firebase and gives us its ID token; we verify it
-//!      RS256/JWKS against `https://securetoken.google.com/<project>`.
-//!   2. **Supabase Auth** (`GROWTH_SUPABASE_URL` set) — optional alternate
-//!      source (asymmetric JWKS; legacy HS256 only with the shared secret).
-//!      Supabase is the data plane (Postgres + RLS); its Auth is NOT used.
-//!   3. **Dev fallback** — literal token `"dev"` → `local_dev`; ONLY accepted
+//!   1. **Supabase Auth** (`GROWTH_SUPABASE_URL` set) — production identity;
+//!      asymmetric JWKS is preferred, with legacy HS256 supported by secret.
+//!   2. **Dev fallback** — literal token `"dev"` → `local_dev`; ONLY accepted
 //!      when no identity provider is configured AND `GROWTH_ALLOW_DEV_AUTH=true`.
 //!      Never in production.
 //!
@@ -32,9 +27,6 @@ use tokio::sync::RwLock;
 use super::error::{AppError, AppResult};
 
 const JWKS_REFRESH_TTL: Duration = Duration::from_secs(1800);
-const FIREBASE_JWKS_URL: &str =
-    "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com";
-const FIREBASE_ISSUER_PREFIX: &str = "https://securetoken.google.com/";
 const HTTP_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// A verified provider identity before access-policy checks. `/api/auth/me`
@@ -56,7 +48,7 @@ pub struct AuthUser {
     pub is_admin: bool,
 }
 
-/// Minimal usable token payload for either provider.
+/// Minimal usable token payload.
 #[derive(Debug, Deserialize)]
 struct Claims {
     sub: String,
@@ -66,14 +58,18 @@ struct Claims {
     email_verified: Option<bool>,
     #[serde(default)]
     name: Option<String>,
+    #[serde(default)]
+    user_metadata: Option<serde_json::Value>,
     #[allow(dead_code)]
     aud: serde_json::Value,
+    #[serde(default)]
+    role: Option<String>,
     #[allow(dead_code)]
     iss: String,
 }
 
 // ---------------------------------------------------------------------------
-// Per-source JWKS caches (Firebase and each Supabase project have their own)
+// Per-project JWKS caches
 // ---------------------------------------------------------------------------
 
 /// One JWKS source — refreshed on a TTL, shared across all requests, so
@@ -167,29 +163,45 @@ async fn verify_with_jwks(token: &str, jwks_url: &str, expected_iss: &str) -> Ap
 
     let mut validation = Validation::new(header.alg);
     validation.iss = Some(std::collections::HashSet::from([expected_iss.into()]));
-    validation.validate_aud = false; // tenancy bound via the project-specific issuer instead
+    validation.aud = Some(std::collections::HashSet::from(["authenticated".into()]));
+    validation.validate_aud = true;
     validation.leeway = 60; // device clock drift
 
     let data = decode::<Claims>(token, key, &validation)
         .map_err(|e| AppError::Unauthorized(format!("invalid token: {e}")))?;
-    if data.claims.sub.is_empty() {
-        return Err(AppError::Unauthorized("token without subject".into()));
-    }
+    validate_user_claims(&data.claims)?;
     Ok(identity_from_claims(data.claims))
 }
 
+fn validate_user_claims(claims: &Claims) -> AppResult<()> {
+    if claims.sub.is_empty() {
+        return Err(AppError::Unauthorized("token without subject".into()));
+    }
+    if claims.role.as_deref() != Some("authenticated") {
+        return Err(AppError::Unauthorized(
+            "token is not for an authenticated user".into(),
+        ));
+    }
+    Ok(())
+}
+
 fn identity_from_claims(claims: Claims) -> Identity {
+    let metadata_name = claims.user_metadata.as_ref().and_then(|metadata| {
+        metadata
+            .get("full_name")
+            .or_else(|| metadata.get("name"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    });
     Identity {
         id: claims.sub,
         email: claims.email.filter(|email| !email.trim().is_empty()),
         email_verified: claims.email_verified.unwrap_or(false),
-        name: claims.name.filter(|name| !name.trim().is_empty()),
+        name: claims
+            .name
+            .filter(|name| !name.trim().is_empty())
+            .or(metadata_name),
     }
-}
-
-async fn verify_firebase_token(token: &str, project_id: &str) -> AppResult<Identity> {
-    let iss = format!("{FIREBASE_ISSUER_PREFIX}{project_id}");
-    verify_with_jwks(token, FIREBASE_JWKS_URL, &iss).await
 }
 
 async fn verify_supabase_token(
@@ -214,7 +226,8 @@ async fn verify_supabase_token(
         })?;
         let mut validation = Validation::new(Algorithm::HS256);
         validation.iss = Some(std::collections::HashSet::from([iss]));
-        validation.validate_aud = false;
+        validation.aud = Some(std::collections::HashSet::from(["authenticated".into()]));
+        validation.validate_aud = true;
         validation.leeway = 60;
         let data = decode::<Claims>(
             token,
@@ -222,10 +235,8 @@ async fn verify_supabase_token(
             &validation,
         )
         .map_err(|e| AppError::Unauthorized(format!("invalid token: {e}")))?;
-        if data.claims.sub.is_empty() {
-            return Err(AppError::Unauthorized("token without subject".into()));
-        }
-        return Ok(identity_from_claims(data.claims));
+        validate_user_claims(&data.claims)?;
+        return Ok(identity_from_supabase_claims(data.claims));
     }
 
     verify_with_jwks(
@@ -234,6 +245,24 @@ async fn verify_supabase_token(
         &iss,
     )
     .await
+    .map(|mut identity| {
+        if identity.email.is_some() {
+            identity.email_verified = true;
+        }
+        identity
+    })
+}
+
+/// Supabase's standard access-token claims do not contain `email_verified`.
+/// A Supabase session is issued only after satisfying that project's email
+/// confirmation setting; OAuth providers supply the confirmed account email.
+/// Treat a non-empty email on its verified token as verified for invite policy.
+fn identity_from_supabase_claims(claims: Claims) -> Identity {
+    let mut identity = identity_from_claims(claims);
+    if identity.email.is_some() {
+        identity.email_verified = true;
+    }
+    identity
 }
 
 /// Resolves the provider identity from the request. This does **not** check the
@@ -255,16 +284,6 @@ impl FromRequestParts<Arc<crate::AppState>> for Identity {
             .map(str::trim)
             .ok_or_else(|| AppError::Unauthorized("missing bearer token".into()))?;
 
-        if config.firebase_configured() {
-            let project_id = config
-                .firebase_project_id
-                .as_ref()
-                .ok_or_else(|| AppError::Config("firebase project id unset".into()))?;
-            let identity = verify_firebase_token(bearer, project_id).await?;
-            tracing::trace!(user_id = %identity.id, "authenticated via firebase");
-            return Ok(identity);
-        }
-
         if config.supabase_configured() {
             let origin = config.supabase_origin().unwrap_or_default();
             let identity =
@@ -285,7 +304,7 @@ impl FromRequestParts<Arc<crate::AppState>> for Identity {
         }
 
         Err(AppError::Unauthorized(
-            "no identity provider configured (set GROWTH_FIREBASE_PROJECT_ID or enable \
+            "no identity provider configured (set GROWTH_SUPABASE_URL or enable \
              GROWTH_ALLOW_DEV_AUTH for local use)"
                 .into(),
         ))

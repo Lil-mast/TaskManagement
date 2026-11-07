@@ -124,7 +124,7 @@ export function BriefScreen() {
           <div>
             <p className="eyebrow">
               <span className="eyebrow__pip" aria-hidden="true" />
-              {dateLabel} / {mode === 'dev' ? 'LOCAL SESSION' : 'FIREBASE SESSION'}
+              {dateLabel} / {mode === 'dev' ? 'LOCAL SESSION' : 'SUPABASE SESSION'}
             </p>
             <h1>
               {greeting()},<br />

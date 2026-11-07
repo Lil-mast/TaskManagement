@@ -14,11 +14,10 @@ Format: postgresql://user:password@pooler.supabase.co:6543/postgres
 Example: postgresql://postgres:abc123@aws-0-us-west-1.pooler.supabase.com:6543/postgres
 ```
 
-### 2. GROWTH_FIREBASE_PROJECT_ID
+### 2. GROWTH_SUPABASE_URL
 ```
-Where: Firebase Console → Project Settings → General Tab
-Format: Just the Project ID string (no special characters)
-Example: growth-copilot-abc123
+Where: Supabase Dashboard → Project Settings → API
+Format: Project URL, for example https://project-ref.supabase.co
 ```
 
 ### 3. GROWTH_ANTHROPIC_API_KEY
@@ -88,8 +87,8 @@ Value: (paste from Supabase pooler)
 → Save
 
 [Second Entry]
-Key:   GROWTH_FIREBASE_PROJECT_ID
-Value: (paste Firebase project ID)
+Key:   GROWTH_SUPABASE_URL
+Value: (paste the Supabase Auth project URL)
 → Save
 
 [Third Entry]
@@ -137,7 +136,7 @@ Expected response from health check:
   "version": "0.1.0",
   "database": "ok",
   "anthropic": "ok",
-  "auth_mode": "firebase",
+  "auth_mode": "supabase",
   "llm_tokens_available": true
 }
 ```
@@ -154,7 +153,6 @@ If any field is `false`:
 | Service | Link |
 |---------|------|
 | Supabase Console | https://app.supabase.com |
-| Firebase Console | https://console.firebase.google.com |
 | Anthropic Dashboard | https://dashboard.anthropic.com |
 | AgentRouter | https://agentrouter.org |
 | OpenAI API Keys | https://platform.openai.com/api-keys |
@@ -170,7 +168,7 @@ If any field is `false`:
 - [ ] Secret values have no extra spaces (paste-and-check)
 - [ ] At least 2 secrets are the generated keys (Token + Cron)
 - [ ] GROWTH_DATABASE_URL uses "Pooler" endpoint (not Direct)
-- [ ] GROWTH_FIREBASE_PROJECT_ID matches frontend's Firebase config
+- [ ] GROWTH_SUPABASE_URL matches the frontend's Supabase project
 - [ ] No secrets starting with `<` or `>` (example placeholders)
 
 ---

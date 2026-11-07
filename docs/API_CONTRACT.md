@@ -5,7 +5,7 @@
 > together.
 
 Base URL: `VITE_API_BASE_URL` (default `http://localhost:8000`).
-Auth: `Authorization: Bearer <Firebase ID token>`. Local dev token `dev` is only
+Auth: `Authorization: Bearer <Supabase access token>`. Local dev token `dev` is only
 valid when no identity provider is configured and `GROWTH_ALLOW_DEV_AUTH=true`.
 Every workspace `/api` route also enforces the invite allowlist; non-admin users
 get a per-user request budget. Admins bypass both. Errors:
@@ -33,11 +33,11 @@ get a per-user request budget. Admins bypass both. Errors:
 
 | Method | Path | Notes |
 |---|---|---|
-| GET | `/healthz` | `{ok, version, database, anthropic, auth_mode, llm_tokens_available}`; `auth_mode` is `firebase\|supabase\|dev\|unconfigured` |
+| GET | `/healthz` | `{ok, version, database, anthropic, auth_mode, llm_tokens_available}`; `auth_mode` is `supabase\|dev\|unconfigured` |
 | GET | `/api/auth/me` | `{user_id, email, name, email_verified, is_admin, allowed, reason, auth_mode}`; `reason` is `email_unverified\|not_invited\|null` |
 
 `/api/auth/me` requires a valid provider token but does not enforce the invite
-list or consume the request budget. The SPA uses it after Firebase sign-in to
+list or consume the request budget. The SPA uses it after Supabase sign-in to
 decide between the workspace and the blocked-account panel.
 
 ### Tasks

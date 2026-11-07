@@ -14,17 +14,16 @@ Google Calendar + Gmail (Phase 3/4) · daily.dev connector.
 ```bash
 cd backend
 cp .env.example .env            # fill at least GROWTH_ANTHROPIC_API_KEY + GROWTH_DATABASE_URL
+cargo fetch                    # download Rust dependencies from Cargo.toml / Cargo.lock
 cargo run                       # → http://localhost:8000  (three bins exist; server is default)
 
 curl -s localhost:8000/healthz
 ```
 
 **Auth:** every `/api` route takes `Authorization: Bearer <token>`. Provider
-precedence: **Firebase Auth** (`GROWTH_FIREBASE_PROJECT_ID`) — the production
-identity; the SPA signs in with the Google OAuth popup through Firebase and
-sends the ID token, verified via JWKS (RS256, issuer-bound). **Supabase Auth**
-verification stays available but unused (`GROWTH_SUPABASE_URL` is the data
-plane only). Dev fallback: the literal token `"dev"` authenticates as
+identity: **Supabase Auth** (`GROWTH_SUPABASE_URL`) — the SPA signs in with
+GitHub or email/password and sends the access token, verified with issuer-bound
+JWKS (or the legacy project JWT secret). Dev fallback: `"dev"` authenticates as
 `local_dev` — **only** when no identity provider is configured.
 `user_id` always comes from the verified token `sub`; request bodies never
 carry identity.
@@ -88,8 +87,7 @@ Full list documented in `.env.example`. Highlights:
 |---|---|
 | `GROWTH_DATABASE_URL` | Supabase Postgres (pooler). Graceful unset → DB features 503 |
 | `GROWTH_ANTHROPIC_API_KEY` / `_MODEL` | LLM — model default `claude-sonnet-5-5` |
-| `GROWTH_SUPABASE_URL` / `_JWT_SECRET` | OPTIONAL — Supabase is the data plane; its Auth is not used (Firebase is the provider) |
-| `GROWTH_FIREBASE_PROJECT_ID` | **the sign-in provider** (SPA Google OAuth popup → Firebase ID token → verified via JWKS) |
+| `GROWTH_SUPABASE_URL` / `_JWT_SECRET` | Supabase Auth project URL; legacy HS256 secret only when applicable |
 | `GROWTH_EMBEDDINGS_API_KEY` / `_MODEL` / `_DIM` / `_BASE_URL` | default provider OpenAI `text-embedding-3-small` @1536-dim |
 | `GROWTH_GOOGLE_CLIENT_ID/_SECRET/_REDIRECT_URL` | one OAuth client, two consents (calendar + gmail) |
 | `GROWTH_TOKEN_ENC_KEY` | hex-32 AES-GCM master key (HKDF per-user keys for tokens at rest) |
@@ -138,7 +136,7 @@ backend/
     ├── main.rs                   # thin async runner
     ├── core/
     │   ├── config.rs             # figment/env config, PORT fallback for hosts
-    │   ├── auth.rs               # Supabase→Firebase→dev Bearer extraction
+    │   ├── auth.rs               # Supabase→dev Bearer extraction
     │   └── error.rs              # AppError → typed HTTP (some fields)
     ├── routes/
     │   ├── mod.rs                 # router assembly, every route nest
@@ -190,8 +188,8 @@ Highlights:
 
 ## Deliberate doc deviations (recorded)
 
-1. **`jsonwebtoken` + JWKS** instead of `firebase-admin`/supabase-admin SDKs —
-   same guarantees, no heavyweight dependency.
+1. **`jsonwebtoken` + JWKS** instead of an auth provider admin SDK — the API
+   verifies Supabase access tokens directly without a heavyweight dependency.
 2. **Runtime-checked sqlx** (`query`/`query_as`) — no build-time DATABASE_URL
    requirement; switching to macros optional later.
 3. **Phase 5 weight formula** — `base × (1 + ln(1+accepted)) / (1+conflicts)`
@@ -214,7 +212,7 @@ wired to Render monitoring.
 - Google OAuth client + secrets → calendar/gmail consents
 - `GROWTH_CRON_SECRET` → scheduled jobs
 - `render` blueprint deploy + cron rows
-- SPA (repo root) is wired to this API — Firebase ID token or backend `dev` token; product screens are the next phase
+- SPA (repo root) is wired to this API — Supabase access token or backend `dev` token
 
 ## Workspace — LeetCode code execution sandbox
 

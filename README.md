@@ -65,7 +65,7 @@ flowchart LR
 
 - **SPA:** React 18, TypeScript, Vite, TanStack Query, Zod at the network boundary.
 - **API:** Rust, Axum, sqlx, Postgres/pgvector.
-- **Auth:** Firebase ID tokens in production, verified against Google's JWKS.
+- **Auth:** Supabase Auth access tokens in production, verified against the project's JWKS.
   Accounts are invite-only; the admin allowlist bypasses per-user budgets. The
   literal dev token is local-only and requires `GROWTH_ALLOW_DEV_AUTH=true`.
 - **No secrets in the SPA.** The browser only holds the API URL and the auth
@@ -80,7 +80,7 @@ tests.
 The core daily loop is live:
 
 - `/` — public landing page with the real capability story.
-- `/login` — sign-in and create-account flow. Firebase mode uses Google or
+- `/login` — sign-in and create-account flow. Supabase mode uses GitHub or
   email/password, verifies email addresses, and blocks accounts that are not on
   the invite list. Local dev-token mode uses an explicit local session.
 - `/onboarding` — four-step calibration for profile, signals, starting tasks,
@@ -117,7 +117,7 @@ on first load.
   Corepack is no longer bundled with Node 25+.
 - **Rust 1.85+** (the backend is edition 2021)
 - **Postgres 15+ with pgvector**, or a Supabase Postgres project, for persistence
-- Optional: Anthropic API key, Firebase project, Google OAuth client, daily.dev
+- Optional: Anthropic API key, Supabase Auth project, Google OAuth client, daily.dev
   token, embeddings key
 
 ### 1. Backend
@@ -141,18 +141,12 @@ For **local dev-token auth**, leave the identity provider blank and opt in
 explicitly:
 
 ```dotenv
-GROWTH_FIREBASE_PROJECT_ID=
 GROWTH_SUPABASE_URL=
 GROWTH_ALLOW_DEV_AUTH=true
 ```
 
 Without `GROWTH_ALLOW_DEV_AUTH=true`, the backend fails closed and rejects
 `Bearer dev` with `401`.
-
-> **Important:** the example file contains the placeholder
-> `GROWTH_FIREBASE_PROJECT_ID=<your-firebase-project-id>`. That placeholder is a
-> non-empty value, so the backend treats it as configured and stops accepting
-> `Bearer dev`. Delete the line or leave it empty for local dev-token mode.
 
 Create the schema once. Run these from `backend/` so the migration tool can read
 `backend/.env`:
@@ -209,19 +203,19 @@ Open `http://localhost:5173`. The intro can be skipped with `Esc`, `Enter`,
 
 Use **Get started** or **Sign in** to reach `/login`. In dev-token mode, choose
 **Enter local workspace**; the session is stored locally and takes you to
-`/onboarding` on the first run, then `/brief`. With Firebase configured, the
-same screen offers Google and email/password sign-in or account creation.
+`/onboarding` on the first run, then `/brief`. With Supabase configured, the
+same screen offers GitHub and email/password sign-in or account creation.
 
 ### Auth modes
 
 | Mode | Backend | Frontend |
 |---|---|---|
-| **Local dev token** | No Firebase/Supabase configured and `GROWTH_ALLOW_DEV_AUTH=true`. `Bearer dev` maps to `local_dev`. | `VITE_AUTH_MODE=dev` |
-| **Firebase** | `GROWTH_FIREBASE_PROJECT_ID` set to a real project ID. | `VITE_AUTH_MODE=firebase` plus all `VITE_FIREBASE_*` values. |
+| **Local dev token** | No Supabase configured and `GROWTH_ALLOW_DEV_AUTH=true`. `Bearer dev` maps to `local_dev`. | `VITE_AUTH_MODE=dev` |
+| **Supabase Auth** | `GROWTH_SUPABASE_URL` set to the Auth project's URL. | `VITE_AUTH_MODE=supabase`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`. |
 | **Unconfigured** | No provider and `GROWTH_ALLOW_DEV_AUTH=false`. Every `/api` call is `401`. | Login shows the unconfigured notice. |
 
-Do not mix them. If the backend has a Firebase project configured, a `dev`
-bearer token will be rejected with `401`. If neither provider nor the dev flag
+Do not mix them. If the backend has Supabase configured, a `dev` bearer token
+will be rejected with `401`. If neither provider nor the dev flag
 is configured, every `/api` route fails closed with `401`.
 
 ### Invite-only access and budgets
@@ -232,14 +226,14 @@ invited by email or provider UID:
 ```dotenv
 # Your account — exempt from the per-user budgets.
 GROWTH_ADMIN_EMAILS=you@example.com
-# Optional: add your Firebase UID as a second admin key.
+# Optional: add your Supabase user ID as a second admin key.
 GROWTH_ADMIN_USER_IDS=
 
 # Invited operators.
 GROWTH_ALLOWED_EMAILS=teammate@example.com,another@example.com
 GROWTH_ALLOWED_USER_IDS=
 
-# Require Firebase email verification before an email allowlist entry applies.
+# Require email verification before an email allowlist entry applies.
 GROWTH_REQUIRE_VERIFIED_EMAIL=true
 
 # Non-admin budgets (token buckets, per process).
@@ -251,7 +245,7 @@ GROWTH_USER_LLM_LIMIT_PER_HOUR=10
 - `10/hour` covers the expensive actions: capture, brief refresh, email triage,
   weekly review generation, and knowledge ingest/search.
 - Admins bypass both budgets.
-- Email allowlist entries require a verified Firebase email unless
+- Email allowlist entries require a verified email unless
   `GROWTH_REQUIRE_VERIFIED_EMAIL=false`. UID entries do not.
 - The SPA calls `GET /api/auth/me` after sign-in. An unverified or uninvited
   account sees the reason on `/login` and can resend verification or sign out.
@@ -260,23 +254,20 @@ GROWTH_USER_LLM_LIMIT_PER_HOUR=10
 - Allowlists are environment configuration; restart the backend after changing
   them.
 
-For Firebase: create a web app in the Firebase console, enable the sign-in
-providers you want, add `localhost` as an authorized domain, then copy the web
-config into `.env.local`:
+For Supabase Auth: configure the GitHub provider in the Supabase dashboard,
+register `https://<project-ref>.supabase.co/auth/v1/callback` as your GitHub
+OAuth app callback, and allow your app origin in Supabase's redirect URL
+settings. Put the public project config in `.env.local`:
 
 ```dotenv
-VITE_AUTH_MODE=firebase
-VITE_FIREBASE_API_KEY=
-VITE_FIREBASE_AUTH_DOMAIN=
-VITE_FIREBASE_PROJECT_ID=
-VITE_FIREBASE_STORAGE_BUCKET=
-VITE_FIREBASE_MESSAGING_SENDER_ID=
-VITE_FIREBASE_APP_ID=
+VITE_AUTH_MODE=supabase
+VITE_SUPABASE_URL=
+VITE_SUPABASE_ANON_KEY=
 ```
 
-Then set the backend's `GROWTH_FIREBASE_PROJECT_ID` to the same project and add
-your verified email to `GROWTH_ADMIN_EMAILS`. Without an admin allowlist entry,
-even a valid Firebase account is denied (`not_invited`).
+Set the backend's `GROWTH_SUPABASE_URL` to the same project URL and add your
+verified email to `GROWTH_ADMIN_EMAILS`. Without an admin allowlist entry, even
+a valid Supabase account is denied (`not_invited`).
 
 ### Optional integrations
 
@@ -349,7 +340,7 @@ pnpm build
 │   │   └── Wordmark.tsx        # MrT lockup with the crimson T
 │   ├── lib/
 │   │   ├── api/                # apiFetch, Zod schemas, endpoint modules
-│   │   ├── auth/               # Firebase provider + session context
+│   │   ├── auth/               # Supabase provider + session context
 │   │   ├── query/              # TanStack Query client + cache keys
 │   │   ├── onboarding.ts       # per-user completion marker
 │   │   └── task-ui.ts          # priority/date/source display helpers
@@ -384,7 +375,7 @@ The landing footer has **Replay intro** for another look.
 
 | Symptom | Cause / fix |
 |---|---|
-| `401` on every `/api` call with `Bearer dev` | Backend has Firebase or Supabase configured. Blank `GROWTH_FIREBASE_PROJECT_ID` and `GROWTH_SUPABASE_URL`, then restart. |
+| `401` on every `/api` call with `Bearer dev` | Backend has Supabase configured. Blank `GROWTH_SUPABASE_URL`, then restart. |
 | `503` on tasks | `GROWTH_DATABASE_URL` is missing or the database is unreachable. Set it, then apply the baseline migration. |
 | `503` on Google/Gmail/calendar | Missing Google client values or an invalid `GROWTH_TOKEN_ENC_KEY`. The key must be 64 hex characters (32 bytes). |
 | Calendar/Gmail consent returns to the wrong place | `GROWTH_GOOGLE_REDIRECT_URL` must match the Google Cloud authorized redirect exactly. |

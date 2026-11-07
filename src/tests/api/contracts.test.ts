@@ -45,14 +45,14 @@ describe('wire contracts', () => {
 
   it('parses an invite-gated identity response', () => {
     const me = authMeSchema.parse({
-      user_id: 'firebase-uid',
+      user_id: 'supabase-uid',
       email: 'invited@example.com',
       name: 'Invited operator',
       email_verified: false,
       is_admin: false,
       allowed: false,
       reason: 'email_unverified',
-      auth_mode: 'firebase',
+      auth_mode: 'supabase',
     });
     expect(me.allowed).toBe(false);
     expect(me.reason).toBe('email_unverified');

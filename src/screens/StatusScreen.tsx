@@ -70,11 +70,11 @@ export function StatusScreen() {
 
         <article className="smoke__card">
           <span className="smoke__label">Auth mode</span>
-          <span className="smoke__metric">{AUTH_MODE === 'dev' ? 'DEV' : 'FIREBASE'}</span>
+          <span className="smoke__metric">{AUTH_MODE === 'dev' ? 'DEV' : 'SUPABASE'}</span>
           <p className="smoke__mono">
             {AUTH_MODE === 'dev'
               ? 'Bearer dev — only valid when the backend has no identity provider.'
-              : 'Firebase ID token attached to every /api call.'}
+              : 'Supabase access token attached to every /api call.'}
           </p>
         </article>
 

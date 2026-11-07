@@ -6,7 +6,7 @@ export type AuthTokenProvider = (options?: TokenProviderOptions) => Promise<stri
 
 let provider: AuthTokenProvider | null = null;
 
-/** Injected at boot (Firebase or dev). Keeps the client testable and SDK-agnostic. */
+/** Injected at boot (Supabase or dev). Keeps the client testable and SDK-agnostic. */
 export function setAuthTokenProvider(next: AuthTokenProvider | null): void {
   provider = next;
 }

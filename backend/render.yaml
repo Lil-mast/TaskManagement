@@ -22,8 +22,8 @@ services:
       # --- data plane (Supabase Postgres) ---
       - key: GROWTH_DATABASE_URL
         sync: false
-      # --- identity (Firebase — the sign-in provider) ---
-      - key: GROWTH_FIREBASE_PROJECT_ID
+      # --- identity (Supabase Auth) ---
+      - key: GROWTH_SUPABASE_URL
         sync: false
       # --- LLM ---
       - key: GROWTH_ANTHROPIC_API_KEY

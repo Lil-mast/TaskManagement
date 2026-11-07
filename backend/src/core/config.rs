@@ -38,7 +38,7 @@ pub struct Config {
     /// Comma-separated verified emails that are admins.
     #[serde(default, deserialize_with = "csv_list::deserialize")]
     pub admin_emails: Vec<String>,
-    /// Comma-separated Firebase/Supabase user ids that are admins.
+    /// Comma-separated Supabase user ids that are admins.
     #[serde(default, deserialize_with = "csv_list::deserialize")]
     pub admin_user_ids: Vec<String>,
     /// Invite-only allowlist by verified email.
@@ -47,14 +47,12 @@ pub struct Config {
     /// Invite-only allowlist by provider user id.
     #[serde(default, deserialize_with = "csv_list::deserialize")]
     pub allowed_user_ids: Vec<String>,
-    /// Reject Firebase accounts whose email is not verified.
+    /// Reject accounts whose email is not verified.
     #[serde(default = "default_true")]
     pub require_verified_email: bool,
     /// Local-only escape hatch. Never enable this on a public deployment.
     #[serde(default)]
     pub allow_dev_auth: bool,
-    #[serde(default)]
-    pub firebase_project_id: Option<String>,
     /// Supabase project URL (https://<ref>.supabase.co) — Phase 6 auth
     /// consolidation target. JWTs verified against the project's JWKS.
     #[serde(default)]
@@ -216,7 +214,6 @@ impl Default for Config {
             allowed_user_ids: Vec::new(),
             require_verified_email: true,
             allow_dev_auth: false,
-            firebase_project_id: None,
             supabase_url: None,
             supabase_jwt_secret: None,
             daily_dev_token: None,
@@ -268,13 +265,6 @@ impl Config {
             .unwrap_or(false)
     }
 
-    pub fn firebase_configured(&self) -> bool {
-        self.firebase_project_id
-            .as_deref()
-            .map(|p| !p.is_empty())
-            .unwrap_or(false)
-    }
-
     pub fn supabase_configured(&self) -> bool {
         self.supabase_url
             .as_deref()
@@ -303,9 +293,7 @@ impl Config {
     }
 
     pub fn auth_mode(&self) -> &'static str {
-        if self.firebase_configured() {
-            "firebase"
-        } else if self.supabase_configured() {
+        if self.supabase_configured() {
             "supabase"
         } else if self.allow_dev_auth {
             "dev"
