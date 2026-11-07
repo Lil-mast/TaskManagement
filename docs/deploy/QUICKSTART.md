@@ -12,7 +12,7 @@ Gather these from your service dashboards:
 | Secret | Where to Find | Looks Like |
 |--------|---------------|-----------|
 | **Database URL** | Supabase Console → Databases → Connection String (Pooler tab) | `postgresql://user:password@pooler.supabase.co:6543/postgres` |
-| **Supabase Auth URL** | Supabase Dashboard → Project Settings → API | `https://project-ref.supabase.co` |
+| **Neon Auth URL** | Neon Console → Auth | `https://project-ref.supabase.co` |
 | **Anthropic Key** | dashboard.anthropic.com → API Keys | `sk-ant-...` (long) |
 | **Embeddings Key** | AgentRouter dashboard or OpenAI API Keys | `sk-ar-...` or `sk-...` |
 | **Google Client ID** | Google Cloud Console → OAuth 2.0 Client IDs | `...apps.googleusercontent.com` |
@@ -42,7 +42,7 @@ Once the service appears in your dashboard:
 2. Go to **Environment** tab
 3. Click **Add Secret** for each of the 8 items:
    - `GROWTH_DATABASE_URL`
-   - `GROWTH_SUPABASE_URL`
+   - `GROWTH_NEON_AUTH_BASE_URL`
    - `GROWTH_ANTHROPIC_API_KEY`
    - `GROWTH_EMBEDDINGS_API_KEY`
    - `GROWTH_GOOGLE_CLIENT_ID`

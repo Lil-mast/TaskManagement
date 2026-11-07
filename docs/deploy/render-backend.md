@@ -37,7 +37,7 @@ All secrets must be set in the Render dashboard **before the first deploy** or o
 | Key | Source | Format | Example | Purpose |
 |-----|--------|--------|---------|---------|
 | **GROWTH_DATABASE_URL** | Supabase Console → Databases → Connection String (Pooler) | `postgresql://user:password@pooler.supabase.co:6543/postgres` | Supabase Postgres pooler URI | Database connection |
-| **GROWTH_SUPABASE_URL** | Supabase Dashboard → Project Settings → API | URL (e.g., `https://project-ref.supabase.co`) | Your Auth project URL | JWT verification, auth backend |
+| **GROWTH_NEON_AUTH_BASE_URL** | Neon Console → Auth | URL (e.g., `https://project-ref.supabase.co`) | Your Auth project URL | JWT verification, auth backend |
 | **GROWTH_ANTHROPIC_API_KEY** | Anthropic Dashboard → API Keys | `sk-ant-...` (67+ chars) | Your Anthropic API key | LLM inference (Claude) |
 | **GROWTH_EMBEDDINGS_API_KEY** | AgentRouter Dashboard → API Keys OR OpenAI API Keys | `sk-ar-...` (AgentRouter) or `sk-...` (OpenAI) | AgentRouter or OpenAI key | Text embeddings for RAG |
 | **GROWTH_GOOGLE_CLIENT_ID** | Google Cloud Console → OAuth 2.0 Client IDs | Long alphanumeric string + `.apps.googleusercontent.com` | Your Google OAuth client ID | Calendar & Gmail OAuth |
@@ -82,7 +82,7 @@ tr -dc 'A-Za-z0-9' < /dev/urandom | head -c 24
 
 ### 1. Prerequisites
 - [ ] Supabase project created with database running
-- [ ] Supabase Auth GitHub provider configured
+- [ ] Neon Auth GitHub provider configured
 - [ ] Anthropic API key generated (no free tier; requires payment method)
 - [ ] Google Cloud OAuth 2.0 credentials created:
   - Authorized redirect URI: `https://growth-copilot.onrender.com/api/integrations/google/callback`
@@ -120,7 +120,7 @@ After Blueprint creation, the service will appear in your Render dashboard.
 2. Navigate to **Environment** tab
 3. For each secret marked `sync: false` in the table above, click **Add Secret** and paste:
    - `GROWTH_DATABASE_URL` → Supabase pooler connection string
-   - `GROWTH_SUPABASE_URL` → Supabase Auth project URL
+   - `GROWTH_NEON_AUTH_BASE_URL` → Neon Auth project URL
    - `GROWTH_ANTHROPIC_API_KEY` → Anthropic key
    - `GROWTH_EMBEDDINGS_API_KEY` → AgentRouter or OpenAI key
    - `GROWTH_GOOGLE_CLIENT_ID` → Google OAuth client ID
@@ -223,7 +223,7 @@ Render automatically:
 |-------|---------|-----|
 | **Missing Secret** | `error: GROWTH_ANTHROPIC_API_KEY not found` in logs | Check Render **Environment** tab, paste secret exactly (no spaces), save & redeploy |
 | **Database Connection Failed** | `connection refused` or `timeout` in logs | Verify `GROWTH_DATABASE_URL` is the pooler (not the direct URL); test locally with `psql` |
-| **Supabase Auth Failed** | `invalid_jwt` or `failed to verify token` | Verify `GROWTH_SUPABASE_URL` matches frontend's project URL; check JWT signing configuration |
+| **Neon Auth Failed** | `invalid_jwt` or `failed to verify token` | Verify `GROWTH_NEON_AUTH_BASE_URL` matches frontend's project URL; check JWT signing configuration |
 | **Distroless Image Error** | `exec: not found` | Render is using distroless correctly; ensure binary linked against libc (check `ldd` output locally) |
 | **Out of Memory** | Service crashes, restart loop | Scale up to **Standard** plan (more RAM); optimize Anthropic requests |
 
@@ -291,7 +291,7 @@ jobs:
 - [ ] `curl /healthz` returns `{ok: true}`
 - [ ] All 8 secrets are set in **Environment** tab (no typos)
 - [ ] `GROWTH_CORS_ORIGINS` includes your frontend domain
-- [ ] Supabase Auth URL matches frontend's config
+- [ ] Neon Auth URL matches frontend's config
 - [ ] Database URL is the **pooler** endpoint (not direct URL)
 - [ ] Anthropic API key is valid (test in Anthropic dashboard)
 - [ ] Render logs show no `panic` or `error` messages

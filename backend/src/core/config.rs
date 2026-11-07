@@ -38,7 +38,7 @@ pub struct Config {
     /// Comma-separated verified emails that are admins.
     #[serde(default, deserialize_with = "csv_list::deserialize")]
     pub admin_emails: Vec<String>,
-    /// Comma-separated Supabase user ids that are admins.
+    /// Comma-separated Neon Auth user ids that are admins.
     #[serde(default, deserialize_with = "csv_list::deserialize")]
     pub admin_user_ids: Vec<String>,
     /// Invite-only allowlist by verified email.
@@ -53,14 +53,11 @@ pub struct Config {
     /// Local-only escape hatch. Never enable this on a public deployment.
     #[serde(default)]
     pub allow_dev_auth: bool,
-    /// Supabase project URL (https://<ref>.supabase.co) — Phase 6 auth
-    /// consolidation target. JWTs verified against the project's JWKS.
+    /// Neon Auth base URL; JWTs verified against its JWKS endpoint.
     #[serde(default)]
-    pub supabase_url: Option<String>,
-    /// Legacy HS256 JWT secret (only for projects still on symmetric signing
-    /// keys); asymmetric JWKS verification is preferred and needs nothing here.
+    pub neon_auth_base_url: Option<String>,
     #[serde(default)]
-    pub supabase_jwt_secret: Option<String>,
+    pub neon_auth_jwks_url: Option<String>,
     /// daily.dev Public API personal access token
     #[serde(default)]
     pub daily_dev_token: Option<String>,
@@ -214,8 +211,8 @@ impl Default for Config {
             allowed_user_ids: Vec::new(),
             require_verified_email: true,
             allow_dev_auth: false,
-            supabase_url: None,
-            supabase_jwt_secret: None,
+            neon_auth_base_url: None,
+            neon_auth_jwks_url: None,
             daily_dev_token: None,
             cron_secret: None,
             embeddings_api_key: None,
@@ -265,19 +262,29 @@ impl Config {
             .unwrap_or(false)
     }
 
-    pub fn supabase_configured(&self) -> bool {
-        self.supabase_url
+    pub fn neon_auth_configured(&self) -> bool {
+        self.neon_auth_base_url
             .as_deref()
             .map(|p| p.trim().trim_end_matches('/').len() > 8)
             .unwrap_or(false)
+            && self.neon_auth_jwks_url.as_deref().map(|p| !p.trim().is_empty()).unwrap_or(false)
     }
 
-    /// Normalized origin (no trailing slash).
-    pub fn supabase_origin(&self) -> Option<&str> {
-        self.supabase_url
+    pub fn neon_auth_base(&self) -> Option<&str> {
+        self.neon_auth_base_url
             .as_deref()
             .map(|p| p.trim().trim_end_matches('/'))
             .filter(|p| p.len() > 8)
+    }
+
+    pub fn neon_auth_issuer(&self) -> Option<String> {
+        let base = self.neon_auth_base()?;
+        let url = url::Url::parse(base).ok()?;
+        Some(url.origin().ascii_serialization())
+    }
+
+    pub fn neon_auth_jwks(&self) -> Option<&str> {
+        self.neon_auth_jwks_url.as_deref().map(str::trim).filter(|p| !p.is_empty())
     }
 
     pub fn google_configured(&self) -> bool {
@@ -293,8 +300,8 @@ impl Config {
     }
 
     pub fn auth_mode(&self) -> &'static str {
-        if self.supabase_configured() {
-            "supabase"
+        if self.neon_auth_configured() {
+            "neon"
         } else if self.allow_dev_auth {
             "dev"
         } else {

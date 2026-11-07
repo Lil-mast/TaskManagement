@@ -8,7 +8,7 @@ Before starting, ensure you have:
 
 - **AWS account** with appropriate permissions (ability to create Amplify apps, manage environment variables, and configure custom domains)
 - **GitHub repository** containing this project and push access
-- **Supabase Auth project** with the GitHub provider enabled
+- **Neon Auth project** with the GitHub provider enabled
 - **Render backend** already deployed and running (the Amplify frontend will call this backend's API)
 - **Local tooling**: Node 22+ and pnpm installed (optional, for local production build verification)
 
@@ -61,16 +61,14 @@ In **App settings** → **Environment variables**, add all of the following:
 | Variable | Value | Required | Notes |
 |---|---|---|---|
 | `VITE_API_BASE_URL` | `https://your-backend.onrender.com` | Yes | **No trailing slash.** Replace with your actual Render backend URL. |
-| `VITE_AUTH_MODE` | `supabase` | Yes | Enables Supabase Auth. |
-| `VITE_SUPABASE_URL` | Supabase Project Settings → API | Yes | Same project URL configured as `GROWTH_SUPABASE_URL` on the backend. |
-| `VITE_SUPABASE_ANON_KEY` | Supabase Project Settings → API | Yes | Public browser key; never use a service-role key here. |
+| `VITE_AUTH_MODE` | `neon` | Yes | Enables Neon Auth. |
+| `VITE_NEON_AUTH_URL` | Neon Console → Auth | Yes | Same project URL configured as `GROWTH_NEON_AUTH_BASE_URL` on the backend. |
 
 **DO NOT set `VITE_DEV_TOKEN` in production.** This is a development-only fallback.
 
-In Supabase, configure GitHub under **Authentication → Sign In / Providers**.
-Register `https://<project-ref>.supabase.co/auth/v1/callback` as the GitHub
-OAuth app callback, and add the Amplify origin to Supabase's allowed redirect
-URLs.
+Configure GitHub under Neon Console → Auth → OAuth Providers. Set the GitHub
+OAuth app callback to the URL shown there, and allow the Amplify origin in Neon
+Auth redirect settings.
 
 ## 4. SPA Routing — Rewrite Rule
 
@@ -105,7 +103,7 @@ After saving the build settings and environment variables:
 | Symptom | Cause | Fix |
 |---|---|---|
 | Build fails in preBuild phase | pnpm version mismatch or corepack issue | Ensure `packageManager: pnpm@12.4.1` is set in `package.json`; check Node.js version is 22 |
-| Build succeeds but app errors at runtime | Missing environment variables | Verify `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_BASE_URL` are set in Amplify console |
+| Build succeeds but app errors at runtime | Missing environment variables | Verify `VITE_NEON_AUTH_URL` and `VITE_API_BASE_URL` are set in Amplify console |
 | `VITE_API_BASE_URL` is undefined | Variable not set or typo in name | Check for exact spelling: `VITE_API_BASE_URL` (case-sensitive) |
 
 ## 6. Add a Custom Domain (Optional)
@@ -120,11 +118,11 @@ If you want to serve the app from a custom domain (e.g., `mrt.example.com`):
 
 Once the domain is active, update your backend CORS allowlist (see section 8).
 
-## 7. Supabase Auth Redirect URLs
+## 7. Neon Auth Redirect URLs
 
-Add the Amplify origin and any custom app domain to the Supabase project's
-Authentication redirect URL allowlist. GitHub redirects first to the Supabase
-callback URL, then Supabase returns the user to the allowed app origin.
+Add the Amplify origin and any custom app domain to Neon Auth's redirect URL
+allowlist. GitHub redirects first to Neon Auth's callback URL, then Neon Auth
+returns the user to the allowed app origin.
 
 ## 8. CORS on the Render Backend
 
@@ -152,7 +150,7 @@ After the build completes and the app is live, follow the **POST_DEPLOY_CHECKLIS
 **App loads but shows errors:** Open browser DevTools → Console. Common issues:
 - "Cannot find module" or an auth configuration error → missing environment variable
 - CORS errors → backend doesn't allow the Amplify domain
-- "Unauthorized" on API calls → Supabase Auth not configured or token invalid
+- "Unauthorized" on API calls → Neon Auth not configured or token invalid
 
 **Need to rebuild manually:** In the Amplify console, go to **Deployments** → (most recent deployment) → **Redeploy this version**.
 

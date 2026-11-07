@@ -6,7 +6,7 @@ import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { AUTH_MODE } from './lib/api/config';
 import { setAuthTokenProvider, createDevTokenProvider } from './lib/api/auth';
-import { createSupabaseTokenProvider } from './lib/auth/supabase';
+import { createNeonTokenProvider } from './lib/auth/neon';
 import { SessionProvider } from './lib/auth/session';
 import { queryClient } from './lib/query/client';
 import './styles/base.css';
@@ -28,8 +28,8 @@ import './styles/intro.css';
 
 if (AUTH_MODE === 'dev') {
   setAuthTokenProvider(createDevTokenProvider());
-} else if (AUTH_MODE === 'supabase') {
-  setAuthTokenProvider(createSupabaseTokenProvider());
+} else if (AUTH_MODE === 'neon') {
+  setAuthTokenProvider(createNeonTokenProvider());
 } else {
   setAuthTokenProvider(null);
 }

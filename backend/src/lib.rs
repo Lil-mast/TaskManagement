@@ -243,12 +243,12 @@ pub async fn build_state(config: Config) -> anyhow::Result<Arc<AppState>> {
         None => None,
     };
 
-    if config.supabase_configured()
+    if config.neon_auth_configured()
         && config.admin_emails.is_empty()
         && config.admin_user_ids.is_empty()
     {
         tracing::warn!(
-            "Supabase Auth is configured but no admin allowlist is set — all non-dev accounts \
+            "Neon Auth is configured but no admin allowlist is set — all non-dev accounts \
              will be denied. Set GROWTH_ADMIN_EMAILS or GROWTH_ADMIN_USER_IDS."
         );
     }

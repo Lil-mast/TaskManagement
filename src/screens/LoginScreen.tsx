@@ -32,7 +32,7 @@ function authErrorCopy(error: unknown): string {
     case 'auth/too-many-requests':
       return 'Too many attempts. Wait a moment, then try again.';
     case 'auth/operation-not-allowed':
-      return "That sign-in method isn't enabled in Supabase.";
+      return "That sign-in method isn't enabled in Neon Auth.";
     case 'auth/account-exists-with-different-credential':
       return 'That email is already linked to another sign-in method.';
     default:
@@ -193,11 +193,10 @@ export function LoginScreen() {
 
           {!configured ? (
             <div className="auth__notice" role="alert">
-              <p className="eyebrow">SUPABASE NOT CONFIGURED</p>
+              <p className="eyebrow">NEON AUTH NOT CONFIGURED</p>
               <h3>Sign-in is not available in this build.</h3>
               <p>
-                Set <code>VITE_AUTH_MODE=supabase</code>, <code>VITE_SUPABASE_URL</code> and{' '}
-                <code>VITE_SUPABASE_ANON_KEY</code>, then rebuild. In local development, use the
+                Set <code>VITE_AUTH_MODE=neon</code> and <code>VITE_NEON_AUTH_URL</code>, then rebuild. In local development, use the
                 dev-token session instead.
               </p>
               <Link className="btn btn--ghost" to="/">
@@ -280,7 +279,7 @@ export function LoginScreen() {
               </div>
               <h3>This build is using the backend's dev token.</h3>
               <p>
-                Supabase Auth is not configured, so sign-in and sign-up are simulated locally. You
+                Neon Auth is not configured, so sign-in and sign-up are simulated locally. You
                 can review the full route without creating an account.
               </p>
               <button
@@ -294,8 +293,8 @@ export function LoginScreen() {
                 Enter local workspace
               </button>
               <p className="auth__hint">
-                To enable real accounts, set <code>VITE_AUTH_MODE=supabase</code> and the{' '}
-                <code>VITE_SUPABASE_*</code> values in <code>.env.local</code>.
+                To enable real accounts, set <code>VITE_AUTH_MODE=neon</code> and{' '}
+                <code>VITE_NEON_AUTH_URL</code> in <code>.env.local</code>.
               </p>
             </div>
           ) : (

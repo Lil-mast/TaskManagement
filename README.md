@@ -65,7 +65,7 @@ flowchart LR
 
 - **SPA:** React 18, TypeScript, Vite, TanStack Query, Zod at the network boundary.
 - **API:** Rust, Axum, sqlx, Postgres/pgvector.
-- **Auth:** Supabase Auth access tokens in production, verified against the project's JWKS.
+- **Auth:** Neon Auth access tokens in production, verified against the project's JWKS.
   Accounts are invite-only; the admin allowlist bypasses per-user budgets. The
   literal dev token is local-only and requires `GROWTH_ALLOW_DEV_AUTH=true`.
 - **No secrets in the SPA.** The browser only holds the API URL and the auth
@@ -80,7 +80,7 @@ tests.
 The core daily loop is live:
 
 - `/` — public landing page with the real capability story.
-- `/login` — sign-in and create-account flow. Supabase mode uses GitHub or
+- `/login` — sign-in and create-account flow. Neon mode uses GitHub or
   email/password, verifies email addresses, and blocks accounts that are not on
   the invite list. Local dev-token mode uses an explicit local session.
 - `/onboarding` — four-step calibration for profile, signals, starting tasks,
@@ -116,8 +116,8 @@ on first load.
 - **pnpm 12.4.1**, pinned in `package.json`. Install it globally with npm —
   Corepack is no longer bundled with Node 25+.
 - **Rust 1.85+** (the backend is edition 2021)
-- **Postgres 15+ with pgvector**, or a Supabase Postgres project, for persistence
-- Optional: Anthropic API key, Supabase Auth project, Google OAuth client, daily.dev
+- **Neon Postgres with pgvector** for persistence
+- Optional: Anthropic API key, Neon Auth project, Google OAuth client, daily.dev
   token, embeddings key
 
 ### 1. Backend
@@ -141,7 +141,7 @@ For **local dev-token auth**, leave the identity provider blank and opt in
 explicitly:
 
 ```dotenv
-GROWTH_SUPABASE_URL=
+GROWTH_NEON_AUTH_BASE_URL and GROWTH_NEON_AUTH_JWKS_URL=
 GROWTH_ALLOW_DEV_AUTH=true
 ```
 
@@ -203,18 +203,18 @@ Open `http://localhost:5173`. The intro can be skipped with `Esc`, `Enter`,
 
 Use **Get started** or **Sign in** to reach `/login`. In dev-token mode, choose
 **Enter local workspace**; the session is stored locally and takes you to
-`/onboarding` on the first run, then `/brief`. With Supabase configured, the
+`/onboarding` on the first run, then `/brief`. With Neon Auth configured, the
 same screen offers GitHub and email/password sign-in or account creation.
 
 ### Auth modes
 
 | Mode | Backend | Frontend |
 |---|---|---|
-| **Local dev token** | No Supabase configured and `GROWTH_ALLOW_DEV_AUTH=true`. `Bearer dev` maps to `local_dev`. | `VITE_AUTH_MODE=dev` |
-| **Supabase Auth** | `GROWTH_SUPABASE_URL` set to the Auth project's URL. | `VITE_AUTH_MODE=supabase`, `VITE_SUPABASE_URL`, and `VITE_SUPABASE_ANON_KEY`. |
+| **Local dev token** | No Neon Auth configured and `GROWTH_ALLOW_DEV_AUTH=true`. `Bearer dev` maps to `local_dev`. | `VITE_AUTH_MODE=dev` |
+| **Neon Auth** | `GROWTH_NEON_AUTH_BASE_URL` and `GROWTH_NEON_AUTH_JWKS_URL` are set. | `VITE_AUTH_MODE=neon` and `VITE_NEON_AUTH_URL`. |
 | **Unconfigured** | No provider and `GROWTH_ALLOW_DEV_AUTH=false`. Every `/api` call is `401`. | Login shows the unconfigured notice. |
 
-Do not mix them. If the backend has Supabase configured, a `dev` bearer token
+Do not mix them. If the backend has Neon Auth configured, a `dev` bearer token
 will be rejected with `401`. If neither provider nor the dev flag
 is configured, every `/api` route fails closed with `401`.
 
@@ -226,7 +226,7 @@ invited by email or provider UID:
 ```dotenv
 # Your account — exempt from the per-user budgets.
 GROWTH_ADMIN_EMAILS=you@example.com
-# Optional: add your Supabase user ID as a second admin key.
+# Optional: add your Neon Auth user ID as a second admin key.
 GROWTH_ADMIN_USER_IDS=
 
 # Invited operators.
@@ -254,20 +254,16 @@ GROWTH_USER_LLM_LIMIT_PER_HOUR=10
 - Allowlists are environment configuration; restart the backend after changing
   them.
 
-For Supabase Auth: configure the GitHub provider in the Supabase dashboard,
-register `https://<project-ref>.supabase.co/auth/v1/callback` as your GitHub
-OAuth app callback, and allow your app origin in Supabase's redirect URL
-settings. Put the public project config in `.env.local`:
+For Neon Auth, configure GitHub in Neon Console → Auth → OAuth Providers. Set the GitHub OAuth app callback to the callback URL shown there, and allow your app origin in Neon Auth redirect settings. Put the auth URL in `.env.local`:
 
 ```dotenv
-VITE_AUTH_MODE=supabase
-VITE_SUPABASE_URL=
-VITE_SUPABASE_ANON_KEY=
+VITE_AUTH_MODE=neon
+VITE_NEON_AUTH_URL=
 ```
 
-Set the backend's `GROWTH_SUPABASE_URL` to the same project URL and add your
+Set the backend's `GROWTH_NEON_AUTH_BASE_URL` and `GROWTH_NEON_AUTH_JWKS_URL` from Neon Auth and add your
 verified email to `GROWTH_ADMIN_EMAILS`. Without an admin allowlist entry, even
-a valid Supabase account is denied (`not_invited`).
+a valid Neon Auth account is denied (`not_invited`).
 
 ### Optional integrations
 
@@ -340,7 +336,7 @@ pnpm build
 │   │   └── Wordmark.tsx        # MrT lockup with the crimson T
 │   ├── lib/
 │   │   ├── api/                # apiFetch, Zod schemas, endpoint modules
-│   │   ├── auth/               # Supabase provider + session context
+│   │   ├── auth/               # Neon Auth provider + session context
 │   │   ├── query/              # TanStack Query client + cache keys
 │   │   ├── onboarding.ts       # per-user completion marker
 │   │   └── task-ui.ts          # priority/date/source display helpers
@@ -375,7 +371,7 @@ The landing footer has **Replay intro** for another look.
 
 | Symptom | Cause / fix |
 |---|---|
-| `401` on every `/api` call with `Bearer dev` | Backend has Supabase configured. Blank `GROWTH_SUPABASE_URL`, then restart. |
+| `401` on every `/api` call with `Bearer dev` | Backend has Neon Auth configured. Blank `GROWTH_NEON_AUTH_BASE_URL and GROWTH_NEON_AUTH_JWKS_URL`, then restart. |
 | `503` on tasks | `GROWTH_DATABASE_URL` is missing or the database is unreachable. Set it, then apply the baseline migration. |
 | `503` on Google/Gmail/calendar | Missing Google client values or an invalid `GROWTH_TOKEN_ENC_KEY`. The key must be 64 hex characters (32 bytes). |
 | Calendar/Gmail consent returns to the wrong place | `GROWTH_GOOGLE_REDIRECT_URL` must match the Google Cloud authorized redirect exactly. |

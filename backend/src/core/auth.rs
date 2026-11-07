@@ -1,8 +1,7 @@
 //! Verified-identity extraction for `/api` routes.
 //!
 //! Provider precedence on every Bearer token:
-//!   1. **Supabase Auth** (`GROWTH_SUPABASE_URL` set) — production identity;
-//!      asymmetric JWKS is preferred, with legacy HS256 supported by secret.
+//!   1. **Neon Auth** (`GROWTH_NEON_AUTH_BASE_URL` and JWKS URL set) — production identity.
 //!   2. **Dev fallback** — literal token `"dev"` → `local_dev`; ONLY accepted
 //!      when no identity provider is configured AND `GROWTH_ALLOW_DEV_AUTH=true`.
 //!      Never in production.
@@ -56,6 +55,8 @@ struct Claims {
     email: Option<String>,
     #[serde(default)]
     email_verified: Option<bool>,
+    #[serde(rename = "emailVerified", default)]
+    neon_email_verified: Option<bool>,
     #[serde(default)]
     name: Option<String>,
     #[serde(default)]
@@ -161,9 +162,9 @@ async fn verify_with_jwks(token: &str, jwks_url: &str, expected_iss: &str) -> Ap
         AppError::Unauthorized("unknown token signing key for this identity source".into())
     })?;
 
-    let mut validation = Validation::new(header.alg);
+    let mut validation = Validation::new(Algorithm::EdDSA);
     validation.iss = Some(std::collections::HashSet::from([expected_iss.into()]));
-    validation.aud = Some(std::collections::HashSet::from(["authenticated".into()]));
+    validation.aud = Some(std::collections::HashSet::from([expected_iss.into()]));
     validation.validate_aud = true;
     validation.leeway = 60; // device clock drift
 
@@ -196,7 +197,7 @@ fn identity_from_claims(claims: Claims) -> Identity {
     Identity {
         id: claims.sub,
         email: claims.email.filter(|email| !email.trim().is_empty()),
-        email_verified: claims.email_verified.unwrap_or(false),
+        email_verified: claims.neon_email_verified.or(claims.email_verified).unwrap_or(false),
         name: claims
             .name
             .filter(|name| !name.trim().is_empty())
@@ -204,65 +205,8 @@ fn identity_from_claims(claims: Claims) -> Identity {
     }
 }
 
-async fn verify_supabase_token(
-    token: &str,
-    origin: &str,
-    jwt_secret: Option<&str>,
-) -> AppResult<Identity> {
-    let iss = format!("{origin}/auth/v1");
-    let header = jsonwebtoken::decode_header(token)
-        .map_err(|e| AppError::Unauthorized(format!("malformed token: {e}")))?;
-
-    if header.alg == Algorithm::HS256 {
-        // Legacy projects: HMAC with the project JWT secret. The secret is
-        // project-specific, so possession of *this project's* secret is
-        // exactly the trust boundary.
-        let secret = jwt_secret.filter(|s| !s.is_empty()).ok_or_else(|| {
-            AppError::Unauthorized(
-                "legacy HS256 token — set GROWTH_SUPABASE_JWT_SECRET or migrate the \
-                     project to asymmetric signing keys"
-                    .into(),
-            )
-        })?;
-        let mut validation = Validation::new(Algorithm::HS256);
-        validation.iss = Some(std::collections::HashSet::from([iss]));
-        validation.aud = Some(std::collections::HashSet::from(["authenticated".into()]));
-        validation.validate_aud = true;
-        validation.leeway = 60;
-        let data = decode::<Claims>(
-            token,
-            &DecodingKey::from_secret(secret.as_bytes()),
-            &validation,
-        )
-        .map_err(|e| AppError::Unauthorized(format!("invalid token: {e}")))?;
-        validate_user_claims(&data.claims)?;
-        return Ok(identity_from_supabase_claims(data.claims));
-    }
-
-    verify_with_jwks(
-        token,
-        &format!("{origin}/auth/v1/.well-known/jwks.json"),
-        &iss,
-    )
-    .await
-    .map(|mut identity| {
-        if identity.email.is_some() {
-            identity.email_verified = true;
-        }
-        identity
-    })
-}
-
-/// Supabase's standard access-token claims do not contain `email_verified`.
-/// A Supabase session is issued only after satisfying that project's email
-/// confirmation setting; OAuth providers supply the confirmed account email.
-/// Treat a non-empty email on its verified token as verified for invite policy.
-fn identity_from_supabase_claims(claims: Claims) -> Identity {
-    let mut identity = identity_from_claims(claims);
-    if identity.email.is_some() {
-        identity.email_verified = true;
-    }
-    identity
+async fn verify_neon_token(token: &str, jwks_url: &str, issuer: &str) -> AppResult<Identity> {
+    verify_with_jwks(token, jwks_url, issuer).await
 }
 
 /// Resolves the provider identity from the request. This does **not** check the
@@ -284,12 +228,11 @@ impl FromRequestParts<Arc<crate::AppState>> for Identity {
             .map(str::trim)
             .ok_or_else(|| AppError::Unauthorized("missing bearer token".into()))?;
 
-        if config.supabase_configured() {
-            let origin = config.supabase_origin().unwrap_or_default();
-            let identity =
-                verify_supabase_token(bearer, origin, config.supabase_jwt_secret.as_deref())
-                    .await?;
-            tracing::trace!(user_id = %identity.id, "authenticated via supabase");
+        if config.neon_auth_configured() {
+            let issuer = config.neon_auth_issuer().unwrap_or_default();
+            let jwks_url = config.neon_auth_jwks().unwrap_or_default();
+            let identity = verify_neon_token(bearer, jwks_url, &issuer).await?;
+            tracing::trace!(user_id = %identity.id, "authenticated via Neon Auth");
             return Ok(identity);
         }
 
@@ -304,7 +247,7 @@ impl FromRequestParts<Arc<crate::AppState>> for Identity {
         }
 
         Err(AppError::Unauthorized(
-            "no identity provider configured (set GROWTH_SUPABASE_URL or enable \
+            "no identity provider configured (set GROWTH_NEON_AUTH_BASE_URL and GROWTH_NEON_AUTH_JWKS_URL or enable \
              GROWTH_ALLOW_DEV_AUTH for local use)"
                 .into(),
         ))

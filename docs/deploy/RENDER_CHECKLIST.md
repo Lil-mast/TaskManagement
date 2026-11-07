@@ -7,7 +7,7 @@ Quick reference for deploying Growth Copilot backend to Render. Follow in order.
 ## Pre-Deployment Prep (5 min)
 
 - [ ] Have Supabase database running; copy **Pooler** connection string
-- [ ] Have Supabase Auth project URL and configure its GitHub provider
+- [ ] Have Neon Auth project URL and configure its GitHub provider
 - [ ] Have Anthropic API key (dashboard.anthropic.com → API Keys)
 - [ ] Have Google OAuth credentials:
   - Client ID
@@ -59,9 +59,9 @@ Key: GROWTH_DATABASE_URL
 Value: postgresql://user:password@...pooler.supabase.co:6543/postgres
 (copy from Supabase Console → Databases → Connection String)
 
-Key: GROWTH_SUPABASE_URL
+Key: GROWTH_NEON_AUTH_BASE_URL
 Value: https://your-project-ref.supabase.co
-(from Supabase Dashboard → Project Settings → API)
+(from Neon Console → Auth)
 
 Key: GROWTH_ANTHROPIC_API_KEY
 Value: sk-ant-...
@@ -160,7 +160,7 @@ Once your frontend is deployed on AWS CloudFront:
 ### Health Check Returns Error
 - `database: false` → `GROWTH_DATABASE_URL` is wrong (test with `psql` locally)
 - `anthropic: false` → `GROWTH_ANTHROPIC_API_KEY` is invalid (test on Anthropic dashboard)
-- `auth_mode: unconfigured` → set `GROWTH_SUPABASE_URL` on the backend
+- `auth_mode: unconfigured` → set `GROWTH_NEON_AUTH_BASE_URL` on the backend
 
 ### Manual Restart
 If the service is stuck:

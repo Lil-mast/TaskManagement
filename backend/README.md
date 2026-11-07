@@ -21,7 +21,7 @@ curl -s localhost:8000/healthz
 ```
 
 **Auth:** every `/api` route takes `Authorization: Bearer <token>`. Provider
-identity: **Supabase Auth** (`GROWTH_SUPABASE_URL`) — the SPA signs in with
+identity: **Neon Auth** (`GROWTH_NEON_AUTH_BASE_URL`) — the SPA signs in with
 GitHub or email/password and sends the access token, verified with issuer-bound
 JWKS (or the legacy project JWT secret). Dev fallback: `"dev"` authenticates as
 `local_dev` — **only** when no identity provider is configured.
@@ -87,7 +87,7 @@ Full list documented in `.env.example`. Highlights:
 |---|---|
 | `GROWTH_DATABASE_URL` | Supabase Postgres (pooler). Graceful unset → DB features 503 |
 | `GROWTH_ANTHROPIC_API_KEY` / `_MODEL` | LLM — model default `claude-sonnet-5-5` |
-| `GROWTH_SUPABASE_URL` / `_JWT_SECRET` | Supabase Auth project URL; legacy HS256 secret only when applicable |
+| `GROWTH_NEON_AUTH_BASE_URL` / `_JWT_SECRET` | Neon Auth project URL; legacy HS256 secret only when applicable |
 | `GROWTH_EMBEDDINGS_API_KEY` / `_MODEL` / `_DIM` / `_BASE_URL` | default provider OpenAI `text-embedding-3-small` @1536-dim |
 | `GROWTH_GOOGLE_CLIENT_ID/_SECRET/_REDIRECT_URL` | one OAuth client, two consents (calendar + gmail) |
 | `GROWTH_TOKEN_ENC_KEY` | hex-32 AES-GCM master key (HKDF per-user keys for tokens at rest) |

@@ -13,17 +13,19 @@ services:
     runtime: docker              # multi-stage Dockerfile → distroless
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    region: oregon               # pick closest to your Supabase region
+    region: oregon               # pick a region close to your Neon project
     plan: starter
     numInstances: 1
     healthCheckPath: /healthz    # wired into Render monitoring
     autoDeploy: true             # deploy on push to the tracked branch
     envVars:
-      # --- data plane (Supabase Postgres) ---
+      # --- data plane (Neon Postgres) ---
       - key: GROWTH_DATABASE_URL
         sync: false
-      # --- identity (Supabase Auth) ---
-      - key: GROWTH_SUPABASE_URL
+      # --- identity (Neon Auth) ---
+      - key: GROWTH_NEON_AUTH_BASE_URL
+        sync: false
+      - key: GROWTH_NEON_AUTH_JWKS_URL
         sync: false
       # --- LLM ---
       - key: GROWTH_ANTHROPIC_API_KEY
@@ -53,4 +55,4 @@ services:
       # --- CORS: your SPA origin ---
       - key: GROWTH_CORS_ORIGINS
         value: https://<your-spa.pages.dev>
-    # No disks needed — stateless; everything persists in Supabase.
+    # No disks needed — stateless; everything persists in Neon Postgres.

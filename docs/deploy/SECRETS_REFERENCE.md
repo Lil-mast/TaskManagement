@@ -14,9 +14,9 @@ Format: postgresql://user:password@pooler.supabase.co:6543/postgres
 Example: postgresql://postgres:abc123@aws-0-us-west-1.pooler.supabase.com:6543/postgres
 ```
 
-### 2. GROWTH_SUPABASE_URL
+### 2. GROWTH_NEON_AUTH_BASE_URL
 ```
-Where: Supabase Dashboard → Project Settings → API
+Where: Neon Console → Auth
 Format: Project URL, for example https://project-ref.supabase.co
 ```
 
@@ -87,8 +87,8 @@ Value: (paste from Supabase pooler)
 → Save
 
 [Second Entry]
-Key:   GROWTH_SUPABASE_URL
-Value: (paste the Supabase Auth project URL)
+Key:   GROWTH_NEON_AUTH_BASE_URL
+Value: (paste the Neon Auth project URL)
 → Save
 
 [Third Entry]
@@ -136,7 +136,7 @@ Expected response from health check:
   "version": "0.1.0",
   "database": "ok",
   "anthropic": "ok",
-  "auth_mode": "supabase",
+  "auth_mode": "neon",
   "llm_tokens_available": true
 }
 ```
@@ -168,7 +168,7 @@ If any field is `false`:
 - [ ] Secret values have no extra spaces (paste-and-check)
 - [ ] At least 2 secrets are the generated keys (Token + Cron)
 - [ ] GROWTH_DATABASE_URL uses "Pooler" endpoint (not Direct)
-- [ ] GROWTH_SUPABASE_URL matches the frontend's Supabase project
+- [ ] GROWTH_NEON_AUTH_BASE_URL matches the frontend's Neon Auth project
 - [ ] No secrets starting with `<` or `>` (example placeholders)
 
 ---

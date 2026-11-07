@@ -132,7 +132,7 @@ export function AppShell() {
         </nav>
 
         <div className="shell__rail-foot">
-          <span className="rail-mode" title={mode === 'dev' ? 'Local dev session' : 'Supabase session'}>
+          <span className="rail-mode" title={mode === 'dev' ? 'Local dev session' : 'Neon Auth session'}>
             {mode === 'dev' ? 'LOCAL' : 'FIRE'}
           </span>
           <button
@@ -216,7 +216,7 @@ export function AppShell() {
             />
             {health.isPending ? 'SYNCING' : health.isSuccess ? 'SYNCED' : 'OFFLINE'}
           </span>
-          <span className="shell__status-item">{mode === 'dev' ? 'LOCAL SESSION' : 'SUPABASE'}</span>
+          <span className="shell__status-item">{mode === 'dev' ? 'LOCAL SESSION' : 'NEON AUTH'}</span>
           <span className="shell__status-item shell__status-item--wide">⌘K CAPTURE</span>
           <span className="shell__status-item">MRT / 2026</span>
         </footer>

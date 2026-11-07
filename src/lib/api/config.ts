@@ -9,19 +9,17 @@ export const API_BASE_URL = withoutTrailingSlash(
   configuredBase && configuredBase.length > 0 ? configuredBase : 'http://localhost:8000',
 );
 
-export type AuthMode = 'dev' | 'supabase';
+export type AuthMode = 'dev' | 'neon';
 
-export const isSupabaseConfigured = Boolean(
-  import.meta.env.VITE_SUPABASE_URL?.trim() && import.meta.env.VITE_SUPABASE_ANON_KEY?.trim(),
-);
+export const isNeonConfigured = Boolean(import.meta.env.VITE_NEON_AUTH_URL?.trim());
 
 const explicitAuthMode = import.meta.env.VITE_AUTH_MODE;
 
 export const AUTH_MODE: AuthMode | 'unconfigured' =
-  explicitAuthMode === 'dev' || explicitAuthMode === 'supabase'
+  explicitAuthMode === 'dev' || explicitAuthMode === 'neon'
     ? explicitAuthMode
-    : isSupabaseConfigured
-      ? 'supabase'
+    : isNeonConfigured
+      ? 'neon'
       : import.meta.env.DEV
         ? 'dev'
         : 'unconfigured';

@@ -11,7 +11,7 @@ Secrets live in Render's environment, set via dashboard → service →
 | Key | Where to get it |
 |---|---|
 | `GROWTH_DATABASE_URL` | Supabase → Project settings → Database → Connection string (pooler `:5432` URI) |
-| `GROWTH_SUPABASE_URL` | Supabase → Project settings → API (Auth project URL) |
+| `GROWTH_NEON_AUTH_BASE_URL` | Supabase → Project settings → API (Auth project URL) |
 | `GROWTH_ANTHROPIC_API_KEY` | Anthropic console (already in local `.env`) |
 | `GROWTH_EMBEDDINGS_API_KEY` | OpenAI (unblocks RAG) |
 | `GROWTH_GOOGLE_CLIENT_ID` / `..._SECRET` | Google Cloud → Credentials → OAuth web client |

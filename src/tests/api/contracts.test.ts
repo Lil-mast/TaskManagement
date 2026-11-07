@@ -45,14 +45,14 @@ describe('wire contracts', () => {
 
   it('parses an invite-gated identity response', () => {
     const me = authMeSchema.parse({
-      user_id: 'supabase-uid',
+      user_id: 'neon-uid',
       email: 'invited@example.com',
       name: 'Invited operator',
       email_verified: false,
       is_admin: false,
       allowed: false,
       reason: 'email_unverified',
-      auth_mode: 'supabase',
+      auth_mode: 'neon',
     });
     expect(me.allowed).toBe(false);
     expect(me.reason).toBe('email_unverified');
