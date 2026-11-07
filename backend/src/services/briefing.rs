@@ -71,11 +71,28 @@ pub struct BriefLeetCode {
     pub challenge: Option<DailyChallenge>,
 }
 
+/// Models occasionally serialize a nested structured field as JSON text even
+/// when the tool schema asks for an object. Accept both forms at this boundary
+/// and keep the stored/API shape canonical as an object.
+fn deserialize_json_value_or_string<'de, D, T>(deserializer: D) -> Result<T, D::Error>
+where
+    D: serde::Deserializer<'de>,
+    T: serde::de::DeserializeOwned,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::String(json) => serde_json::from_str(&json)
+            .map_err(<D::Error as serde::de::Error>::custom),
+        value => serde_json::from_value(value).map_err(<D::Error as serde::de::Error>::custom),
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BriefPayload {
     pub headline: String,
     pub priorities: Vec<BriefPriority>,
     pub watchlist: Vec<BriefWatchItem>,
+    #[serde(deserialize_with = "deserialize_json_value_or_string")]
     pub leetcode: BriefLeetCode,
     pub principles_used: Vec<String>,
     /// progress on briefing quality is not the issue on empty contexts
