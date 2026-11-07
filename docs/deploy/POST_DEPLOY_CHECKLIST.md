@@ -12,7 +12,7 @@ After deploying to AWS Amplify, use this checklist to verify that the app is wor
 
 ## Authentication
 
-- [ ] Amplify domain is added to Firebase Authorized Domains (Firebase Console → Authentication → Settings → Authorized domains)
+- [ ] App domain is listed in Supabase Auth's redirect URL allowlist
 - [ ] Sign-in with Google works: click "Sign in" → Google popup opens → completes sign-in → redirects to `/brief`
 - [ ] After successful sign-in, the app shows the user's email in the header
 - [ ] Bearer token is attached to API requests (DevTools → Network → (any API call) → Request headers → `Authorization: Bearer <token>`)
@@ -32,8 +32,8 @@ After deploying to AWS Amplify, use this checklist to verify that the app is wor
 ## Environment Variables
 
 - [ ] No `VITE_DEV_TOKEN` visible in the built JavaScript (DevTools → Sources → (search for VITE_DEV_TOKEN) → should not find it)
-- [ ] `VITE_AUTH_MODE` is `firebase` (not `dev`): sign-in uses Firebase, not a hardcoded token
-- [ ] All Firebase config values are present (no "Firebase: Error (auth/invalid-api-key)" or similar in console)
+- [ ] `VITE_AUTH_MODE` is `supabase` (not `dev`)
+- [ ] Supabase URL and anon key are set and match the backend project's Auth URL
 - [ ] `VITE_API_BASE_URL` is the correct Render backend URL (no typos, no trailing slash)
 
 ## Performance & Polish
@@ -48,7 +48,7 @@ After deploying to AWS Amplify, use this checklist to verify that the app is wor
 
 - [ ] HTTPS certificate is issued and valid (no browser security warning, padlock icon visible)
 - [ ] Root domain redirects to www (or vice versa) as configured
-- [ ] Custom domain is added to Firebase Authorized Domains
+- [ ] Custom domain is added to Supabase Auth's redirect URL allowlist
 - [ ] CORS allowlist on Render backend includes the custom domain
 - [ ] `VITE_API_BASE_URL` matches the backend origin in the CORS allowlist
 

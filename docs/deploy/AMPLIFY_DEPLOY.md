@@ -8,7 +8,7 @@ Before starting, ensure you have:
 
 - **AWS account** with appropriate permissions (ability to create Amplify apps, manage environment variables, and configure custom domains)
 - **GitHub repository** containing this project and push access
-- **Firebase project** already configured with authentication enabled (the app uses Firebase Auth for sign-in)
+- **Supabase Auth project** with the GitHub provider enabled
 - **Render backend** already deployed and running (the Amplify frontend will call this backend's API)
 - **Local tooling**: Node 22+ and pnpm installed (optional, for local production build verification)
 
@@ -61,23 +61,16 @@ In **App settings** → **Environment variables**, add all of the following:
 | Variable | Value | Required | Notes |
 |---|---|---|---|
 | `VITE_API_BASE_URL` | `https://your-backend.onrender.com` | Yes | **No trailing slash.** Replace with your actual Render backend URL. |
-| `VITE_AUTH_MODE` | `firebase` | Yes | Must be `firebase` in production. Enables Firebase-based authentication. |
-| `VITE_FIREBASE_API_KEY` | (from Firebase console) | Yes | Found in Firebase Console → Project Settings → "Your apps" → Web app config. |
-| `VITE_FIREBASE_AUTH_DOMAIN` | (from Firebase console) | Yes | Example: `your-project.firebaseapp.com` |
-| `VITE_FIREBASE_PROJECT_ID` | (from Firebase console) | Yes | Your Firebase project ID. |
-| `VITE_FIREBASE_STORAGE_BUCKET` | (from Firebase console) | Yes | Example: `your-project.appspot.com` |
-| `VITE_FIREBASE_MESSAGING_SENDER_ID` | (from Firebase console) | Yes | Numeric ID from Firebase config. |
-| `VITE_FIREBASE_APP_ID` | (from Firebase console) | Yes | App ID from Firebase config. |
+| `VITE_AUTH_MODE` | `supabase` | Yes | Enables Supabase Auth. |
+| `VITE_SUPABASE_URL` | Supabase Project Settings → API | Yes | Same project URL configured as `GROWTH_SUPABASE_URL` on the backend. |
+| `VITE_SUPABASE_ANON_KEY` | Supabase Project Settings → API | Yes | Public browser key; never use a service-role key here. |
 
 **DO NOT set `VITE_DEV_TOKEN` in production.** This is a development-only fallback.
 
-### How to find Firebase config values
-
-1. Open the [Firebase Console](https://console.firebase.google.com/)
-2. Select your project
-3. Go to **Project Settings** (gear icon → "Project Settings")
-4. Under "Your apps," find and click on your Web app
-5. Copy the config object containing all the `VITE_FIREBASE_*` values
+In Supabase, configure GitHub under **Authentication → Sign In / Providers**.
+Register `https://<project-ref>.supabase.co/auth/v1/callback` as the GitHub
+OAuth app callback, and add the Amplify origin to Supabase's allowed redirect
+URLs.
 
 ## 4. SPA Routing — Rewrite Rule
 
@@ -112,7 +105,7 @@ After saving the build settings and environment variables:
 | Symptom | Cause | Fix |
 |---|---|---|
 | Build fails in preBuild phase | pnpm version mismatch or corepack issue | Ensure `packageManager: pnpm@12.4.1` is set in `package.json`; check Node.js version is 22 |
-| Build succeeds but app errors at runtime | Missing environment variables | Verify all `VITE_FIREBASE_*` and `VITE_API_BASE_URL` are set in Amplify console |
+| Build succeeds but app errors at runtime | Missing environment variables | Verify `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, and `VITE_API_BASE_URL` are set in Amplify console |
 | `VITE_API_BASE_URL` is undefined | Variable not set or typo in name | Check for exact spelling: `VITE_API_BASE_URL` (case-sensitive) |
 
 ## 6. Add a Custom Domain (Optional)
@@ -127,18 +120,11 @@ If you want to serve the app from a custom domain (e.g., `mrt.example.com`):
 
 Once the domain is active, update your backend CORS allowlist (see section 8).
 
-## 7. Firebase Authorized Domains
+## 7. Supabase Auth Redirect URLs
 
-After the Amplify deployment is live, you must add the Amplify domain to Firebase's authorized domains list. Otherwise, Firebase sign-in will be blocked with a `projectID invalid-api-key` error.
-
-1. Open the [Firebase Console](https://console.firebase.google.com/)
-2. Select your project
-3. Go to **Authentication** → **Settings** → **Authorized domains**
-4. Add:
-   - The Amplify default domain: `main.xxxxxx.amplifyapp.com` (shown in your Amplify console under the app name)
-   - Your custom domain (if configured in section 6)
-
-Firebase sign-in will fail silently if the domain is not authorized.
+Add the Amplify origin and any custom app domain to the Supabase project's
+Authentication redirect URL allowlist. GitHub redirects first to the Supabase
+callback URL, then Supabase returns the user to the allowed app origin.
 
 ## 8. CORS on the Render Backend
 
@@ -164,9 +150,9 @@ After the build completes and the app is live, follow the **POST_DEPLOY_CHECKLIS
 **Build logs are unclear:** Check the individual phase logs in the Amplify console. Each phase (preBuild, Build, Deploy) has its own log stream.
 
 **App loads but shows errors:** Open browser DevTools → Console. Common issues:
-- "Cannot find module" or "Firebase: Error" → missing environment variable
+- "Cannot find module" or an auth configuration error → missing environment variable
 - CORS errors → backend doesn't allow the Amplify domain
-- "Unauthorized" on API calls → Firebase auth not configured or token invalid
+- "Unauthorized" on API calls → Supabase Auth not configured or token invalid
 
 **Need to rebuild manually:** In the Amplify console, go to **Deployments** → (most recent deployment) → **Redeploy this version**.
 
