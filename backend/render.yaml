@@ -13,7 +13,7 @@ services:
     runtime: docker              # multi-stage Dockerfile → distroless
     dockerfilePath: ./backend/Dockerfile
     dockerContext: ./backend
-    region: oregon               # pick a region close to your Neon project
+    region: virginia             # pick a region close to your Neon project
     plan: starter
     numInstances: 1
     healthCheckPath: /healthz    # wired into Render monitoring

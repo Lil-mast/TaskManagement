@@ -3,7 +3,7 @@
 > AI daily productivity & career-growth copilot for mid-level engineers —
 > **all phases (0–6) built**. Design docs: [`../docs/ARCHITECTURE.md`](../docs/ARCHITECTURE.md),
 > [`../docs/RAG_PIPELINE.md`](../docs/RAG_PIPELINE.md), phase tracking in [`../docs/phases/`](../docs/phases/).
-> Deploy runbook: [`deploy/README.md`](deploy/README.md).
+> Deploy runbook: [`deployment.md`](deployment.md).
 
 **Stack:** Axum 0.8 · sqlx (runtime-checked) · Supabase Postgres (pgvector, RLS) ·
 Claude (single rate-limited choke point) · OpenAI-compatible embeddings ·
@@ -201,10 +201,8 @@ Highlights:
 
 ## Deploy
 
-See [`deploy/README.md`](deploy/README.md) — **Render** Blueprint
-(`render.yaml`, Docker runtime), secrets → Render environment (never
-committed), `/cron/*` via Render Cron Job or GitHub Actions, `/healthz`
-wired to Render monitoring.
+See [`deployment.md`](deployment.md) for the Render Blueprint, Docker web
+service, environment, Neon schema, health check, and cron setup.
 
 ## Not yet switched on (user-side)
 
