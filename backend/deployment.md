@@ -2,7 +2,9 @@
 
 This guide deploys the Rust/Axum API as one **Render Web Service** connected to
 Neon Postgres and Neon Auth. The existing production image is built from
-`backend/Dockerfile`.
+`backend/Dockerfile`. The builder uses Rust 1.89 on Debian Bookworm, matching
+the Debian 12 Distroless runtime so the binary and runtime use a compatible
+glibc version.
 
 ## Recommended run model
 

@@ -32,11 +32,12 @@
 # Cargo.lock includes dependencies with an MSRV of Rust 1.89 (for example
 # uuid 1.28.0). Keep the build image at or above the lockfile's MSRV.
 ARG RUST_VERSION=1.89
+ARG RUST_DEBIAN_VARIANT=bookworm
 
 # ---------------------------------------------------------------------------
 # Stage 1: build (deps cached via the two dummy-main trick)
 # ---------------------------------------------------------------------------
-FROM rust:${RUST_VERSION}-slim AS build
+FROM rust:${RUST_VERSION}-slim-${RUST_DEBIAN_VARIANT} AS build
 WORKDIR /build
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
